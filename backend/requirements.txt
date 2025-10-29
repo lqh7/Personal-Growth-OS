@@ -1,0 +1,29 @@
+# Web Framework
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.12
+
+# Database
+sqlalchemy==2.0.36
+alembic==1.14.0
+
+# Data Validation
+pydantic==2.9.2
+pydantic-settings==2.6.1
+
+# AI & LLM
+langchain==0.3.7
+langchain-openai==0.2.8
+langchain-anthropic==0.2.4
+langchain-community==0.3.7
+langgraph==0.2.45
+chromadb==0.5.18
+mem0ai==0.1.32
+
+# Utilities
+python-dotenv==1.0.1
+httpx==0.27.2
+tenacity==9.0.0
+
+# Vector & Embeddings
+sentence-transformers==3.3.1
