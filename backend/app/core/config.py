@@ -19,10 +19,12 @@ class Settings(BaseSettings):
 
     # OpenAI
     OPENAI_API_KEY: str = ""
+    OPENAI_API_BASE: str = ""  # Custom API base URL (optional)
     OPENAI_MODEL: str = "gpt-4o-mini"
 
     # Claude (Anthropic)
     ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_API_BASE: str = ""  # Custom API base URL (optional)
     ANTHROPIC_MODEL: str = "claude-3-5-sonnet-20241022"
 
     # Ollama (Local)

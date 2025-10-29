@@ -99,15 +99,22 @@ curl "http://localhost:8000/api/notes/search/semantic?query=项目管理&limit=5
 
 ## 架构概览
 
+**核心技术栈**：
+- **LangGraph** - 主力Agent框架（StateGraph驱动）
+- **LangChain Core** - 仅用于基础LLM接口，最小化使用
+- **ChromaDB** - 向量数据库用于RAG
+- **SQLite** - 关系数据库
+- **Mem0** - 长期记忆管理
+
 ```
 app/
 ├── api/endpoints/    # API 路由
-│   ├── tasks.py      # 任务管理 API
+│   ├── tasks.py      # 任务管理 API + Agent可视化
 │   └── notes.py      # 笔记管理 API
-├── agents/           # AI Agents
-│   └── task_igniter_agent.py  # 任务分解 Agent
+├── agents/           # LangGraph Agents（核心）
+│   └── task_igniter_agent.py  # StateGraph驱动的任务分解Agent
 ├── core/             # 核心配置
-│   ├── config.py     # 环境配置
+│   ├── config.py     # 环境配置（支持自定义API URL）
 │   └── llm_factory.py  # LLM 工厂（多提供商支持）
 ├── crud/             # 数据访问层
 │   ├── crud_task.py
@@ -122,6 +129,35 @@ app/
     ├── vector_store.py  # ChromaDB RAG 服务
     └── memory_service.py  # Mem0 记忆服务
 ```
+
+## LangGraph Agent架构
+
+### 任务分解Agent (Task Igniter)
+
+基于**LangGraph StateGraph**构建，完全不依赖LangChain Chain：
+
+```python
+# 状态定义
+class TaskIgniterState(TypedDict):
+    user_input: str
+    main_task_title: str
+    subtasks: List[Dict]
+    status: Literal["init", "analyzing", "decomposing", "completed", "error"]
+    ...
+
+# 节点定义
+analyze_task_node -> decompose_task_node -> retrieve_notes_node -> finalize
+
+# 条件路由
+根据status动态路由，支持错误处理
+```
+
+**查看Agent可视化**：
+```bash
+curl http://localhost:8000/api/tasks/agent/visualization
+```
+
+返回Mermaid图，可用于文档和debugging。
 
 ## 数据库
 

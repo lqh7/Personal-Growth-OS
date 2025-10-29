@@ -18,6 +18,21 @@ from app.services.vector_store import get_vector_store
 router = APIRouter()
 
 
+@router.get("/agent/visualization")
+def get_agent_visualization():
+    """
+    获取任务分解Agent的可视化图
+    返回Mermaid格式的图定义，可用于文档和debugging
+    """
+    agent = get_task_igniter()
+    mermaid_graph = agent.get_graph_visualization()
+
+    return {
+        "mermaid": mermaid_graph,
+        "message": "Use this Mermaid diagram to visualize the agent workflow"
+    }
+
+
 @router.get("/", response_model=List[Task])
 def list_tasks(
     skip: int = Query(0, ge=0),
@@ -116,14 +131,24 @@ def task_ignition_ritual(
 
     This is a core feature of the "Action Initiator" pillar.
     """
-    # Step 1: Use AI agent to decompose the task
+    # Step 1: Use LangGraph Agent to decompose the task
     agent = get_task_igniter()
-    decomposition = agent.decompose_task(request.task_description)
+    agent_state = agent.invoke(
+        user_input=request.task_description,
+        project_id=request.project_id
+    )
+
+    # Check if agent execution was successful
+    if agent_state["status"] == "error":
+        raise HTTPException(
+            status_code=500,
+            detail=f"Agent execution failed: {agent_state.get('error_message', 'Unknown error')}"
+        )
 
     # Step 2: Create main task in database
     main_task_data = TaskCreate(
-        title=decomposition.main_task_title,
-        description=decomposition.main_task_description,
+        title=agent_state["main_task_title"],
+        description=agent_state["main_task_description"],
         project_id=request.project_id,
         status="pending"
     )
@@ -133,11 +158,11 @@ def task_ignition_ritual(
     subtasks = []
     minimum_viable_task = None
 
-    for subtask_item in decomposition.subtasks:
+    for idx, subtask_item in enumerate(agent_state["subtasks"]):
         subtask_data = TaskCreate(
-            title=subtask_item.title,
-            description=subtask_item.description,
-            priority=subtask_item.priority,
+            title=subtask_item["title"],
+            description=subtask_item["description"],
+            priority=subtask_item.get("priority", 3),
             parent_task_id=main_task.id,
             project_id=request.project_id,
             status="pending"
@@ -145,26 +170,13 @@ def task_ignition_ritual(
         subtask = crud_task.create_task(db, subtask_data)
         subtasks.append(subtask)
 
-        if subtask_item.is_minimum_viable:
+        # Use the minimum_viable_task_index from agent state
+        if idx == agent_state["minimum_viable_task_index"]:
             minimum_viable_task = subtask
 
-    # Step 4: Search for related notes using RAG
-    vector_store = get_vector_store()
-    related_notes_results = vector_store.search_similar_notes(
-        query=request.task_description,
-        n_results=5
-    )
-
-    # Format related notes for response
-    related_notes = [
-        {
-            "note_id": result["note_id"],
-            "title": result["metadata"].get("title", "Untitled"),
-            "similarity_score": result["score"]
-        }
-        for result in related_notes_results
-        if result["score"] > 0.5  # Only include relevant matches
-    ]
+    # Step 4: Related notes already retrieved by agent
+    # Use the related_notes from agent state
+    related_notes = agent_state.get("related_notes", [])
 
     return TaskIgnitionResponse(
         main_task=main_task,

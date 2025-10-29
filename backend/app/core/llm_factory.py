@@ -40,20 +40,28 @@ class LLMFactory:
         provider = provider or settings.LLM_PROVIDER
 
         if provider == "openai":
-            return ChatOpenAI(
-                api_key=settings.OPENAI_API_KEY,
-                model=settings.OPENAI_MODEL,
-                temperature=temperature,
-                **kwargs
-            )
+            openai_kwargs = {
+                "api_key": settings.OPENAI_API_KEY,
+                "model": settings.OPENAI_MODEL,
+                "temperature": temperature,
+            }
+            # Add custom base URL if provided
+            if settings.OPENAI_API_BASE:
+                openai_kwargs["base_url"] = settings.OPENAI_API_BASE
+            openai_kwargs.update(kwargs)
+            return ChatOpenAI(**openai_kwargs)
 
         elif provider == "claude":
-            return ChatAnthropic(
-                api_key=settings.ANTHROPIC_API_KEY,
-                model=settings.ANTHROPIC_MODEL,
-                temperature=temperature,
-                **kwargs
-            )
+            anthropic_kwargs = {
+                "api_key": settings.ANTHROPIC_API_KEY,
+                "model": settings.ANTHROPIC_MODEL,
+                "temperature": temperature,
+            }
+            # Add custom base URL if provided
+            if settings.ANTHROPIC_API_BASE:
+                anthropic_kwargs["base_url"] = settings.ANTHROPIC_API_BASE
+            anthropic_kwargs.update(kwargs)
+            return ChatAnthropic(**anthropic_kwargs)
 
         elif provider == "ollama":
             return ChatOllama(
