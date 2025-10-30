@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+frontend/dist/
+frontend/.vite/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+personal_growth_os.db
+
+# ChromaDB
+chroma_db/
+
+# Coverage
+coverage/
+*.cover
+.coverage
+.coverage.*
+htmlcov/
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+
+# Lock files (optional - 如果团队需要锁定版本，可以注释掉)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml

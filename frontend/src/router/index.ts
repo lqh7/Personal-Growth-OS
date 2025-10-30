@@ -10,28 +10,31 @@ const router = createRouter({
     {
       path: '/',
       component: MainLayout,
+      redirect: '/dashboard',
       children: [
         {
-          path: '',
-          redirect: '/tasks'
+          path: '/dashboard',
+          name: 'Dashboard',
+          component: () => import('@/views/DashboardView.vue'),
+          meta: { title: '工作台' }
         },
         {
-          path: 'tasks',
-          name: 'tasks',
+          path: '/tasks',
+          name: 'TasksView',
           component: () => import('@/views/TasksView.vue'),
-          meta: { title: '任务管理' }
+          meta: { title: '任务' }
         },
         {
-          path: 'notes',
-          name: 'notes',
+          path: '/notes',
+          name: 'NotesView',
           component: () => import('@/views/NotesView.vue'),
-          meta: { title: '笔记管理' }
+          meta: { title: '笔记' }
         },
         {
-          path: 'review',
-          name: 'review',
+          path: '/review',
+          name: 'ReviewView',
           component: () => import('@/views/ReviewView.vue'),
-          meta: { title: '复盘分析' }
+          meta: { title: '复盘' }
         }
       ]
     }
