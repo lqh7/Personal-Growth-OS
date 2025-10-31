@@ -10,8 +10,9 @@ export interface ViewTask {
   description?: string
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
   priority: number
+  startTime?: Date
+  endTime?: Date
   dueDate?: Date
-  dueTime?: string
   completed: boolean
   project?: {
     id: string
@@ -38,8 +39,9 @@ export function useTaskAdapter() {
       description: apiTask.description,
       status: apiTask.status,
       priority: apiTask.priority,
+      startTime: apiTask.start_time ? new Date(apiTask.start_time) : undefined,
+      endTime: apiTask.end_time ? new Date(apiTask.end_time) : undefined,
       dueDate: apiTask.due_date ? new Date(apiTask.due_date) : undefined,
-      dueTime: apiTask.due_date ? extractTime(apiTask.due_date) : undefined,
       completed: apiTask.status === 'completed',
       project: project ? {
         id: String(project.id),
@@ -61,14 +63,16 @@ export function useTaskAdapter() {
     if (viewTask.status !== undefined) apiTask.status = viewTask.status
     if (viewTask.priority !== undefined) apiTask.priority = viewTask.priority
 
+    if (viewTask.startTime) {
+      apiTask.start_time = viewTask.startTime.toISOString()
+    }
+
+    if (viewTask.endTime) {
+      apiTask.end_time = viewTask.endTime.toISOString()
+    }
+
     if (viewTask.dueDate) {
-      // Combine dueDate and dueTime
-      const date = new Date(viewTask.dueDate)
-      if (viewTask.dueTime) {
-        const [hours, minutes] = viewTask.dueTime.split(':').map(Number)
-        date.setHours(hours, minutes, 0, 0)
-      }
-      apiTask.due_date = date.toISOString()
+      apiTask.due_date = viewTask.dueDate.toISOString()
     }
 
     if (viewTask.project?.id) {

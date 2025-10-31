@@ -1,7 +1,7 @@
 <template>
-  <div class="week-calendar">
+  <div class="week-schedule">
     <!-- Header with Week Navigation -->
-    <div class="calendar-header">
+    <div class="schedule-header">
       <el-button-group>
         <el-button @click="previousWeek">
           <el-icon><ArrowLeft /></el-icon>
@@ -17,8 +17,8 @@
       </div>
     </div>
 
-    <!-- Calendar Grid -->
-    <div class="calendar-grid">
+    <!-- Schedule Grid -->
+    <div class="schedule-grid">
       <!-- Time Column -->
       <div class="time-column">
         <div class="time-header">时间</div>
@@ -53,15 +53,30 @@
             v-for="hour in hours"
             :key="`${day.date.toISOString()}-${hour}`"
             class="time-slot"
+            :data-slot-key="`${day.date.toISOString()}-${hour}`"
             @click="handleSlotClick(day.date, hour)"
-            @dragover.prevent="handleDragOver"
+            @dragover.prevent="handleDragOver($event)"
             @drop="handleDrop(day.date, hour, $event)"
           >
+            <!-- Drag Preview Overlay -->
+            <div v-if="dragOverSlot === `${day.date.toISOString()}-${hour}`" class="drag-preview">
+              <div class="drag-preview-task">
+                <div class="task-title">{{ draggingTask?.title }}</div>
+                <div v-if="draggingTask?.project" class="task-project">
+                  <span
+                    class="project-dot"
+                    :style="{ backgroundColor: draggingTask.project.color }"
+                  ></span>
+                  {{ draggingTask.project.name }}
+                </div>
+              </div>
+            </div>
+
             <!-- Tasks in this time slot -->
             <div
               v-for="task in getTasksAtTime(day.tasks, hour)"
               :key="task.id"
-              class="calendar-task"
+              class="schedule-task"
               :class="[
                 `priority-${task.priority}`,
                 { 'is-completed': task.completed }
@@ -87,7 +102,7 @@
     <!-- Floating Tasks (No Time) -->
     <div v-if="floatingTasks.length > 0" class="floating-tasks">
       <div class="floating-tasks-header">
-        <span>📋 无时间任务（拖拽到日历可指定时间）</span>
+        <span>📋 无时间任务（拖拽到日程表可指定时间）</span>
         <span class="task-count">{{ floatingTasks.length }}</span>
       </div>
       <div class="floating-tasks-list">
@@ -97,6 +112,7 @@
           class="floating-task-item"
           draggable="true"
           @dragstart="handleDragStart(task, $event)"
+          @dragend="handleDragEnd"
           @click="handleTaskClick(task)"
         >
           <el-checkbox v-model="task.completed" @change="$emit('task-complete', task)" />
@@ -131,8 +147,8 @@ interface Task {
   status: 'pending' | 'in_progress' | 'completed'
   priority: number
   dueDate?: Date
-  dueTime?: string // Format: "HH:mm"
-  duration?: number // Duration in minutes
+  startTime?: Date // Changed from dueTime
+  endTime?: Date // New field
   completed: boolean
   project?: {
     id: string
@@ -167,6 +183,8 @@ const emit = defineEmits<{
 // ============================================
 const currentWeekStart = ref(getStartOfWeek(new Date()))
 const hours = Array.from({ length: 14 }, (_, i) => i + 8) // 8:00 - 21:00
+const draggingTask = ref<Task | null>(null)
+const dragOverSlot = ref<string | null>(null)
 
 // ============================================
 // Computed
@@ -202,7 +220,7 @@ const weekRangeText = computed(() => {
 })
 
 const floatingTasks = computed(() => {
-  return props.tasks.filter(task => !task.dueTime && !task.completed)
+  return props.tasks.filter(task => !task.startTime && !task.completed)
 })
 
 // ============================================
@@ -219,29 +237,36 @@ function getStartOfWeek(date: Date): Date {
 
 function getTasksForDay(date: Date): Task[] {
   return props.tasks.filter(task => {
-    if (!task.dueDate) return false
-    const taskDate = new Date(task.dueDate)
+    if (!task.startTime) return false
+    const taskDate = new Date(task.startTime)
     return (
       taskDate.getFullYear() === date.getFullYear() &&
       taskDate.getMonth() === date.getMonth() &&
-      taskDate.getDate() === date.getDate() &&
-      task.dueTime // Only tasks with specific time
+      taskDate.getDate() === date.getDate()
     )
   })
 }
 
 function getTasksAtTime(dayTasks: Task[], hour: number): Task[] {
   return dayTasks.filter(task => {
-    if (!task.dueTime) return false
-    const [taskHour] = task.dueTime.split(':').map(Number)
-    return taskHour === hour
+    if (!task.startTime) return false
+    const taskDate = new Date(task.startTime)
+    return taskDate.getHours() === hour
   })
 }
 
 function calculateTaskHeight(task: Task): string {
-  // Default 1 hour = 60px, each 30min = 30px
-  const duration = task.duration || 60
-  const height = (duration / 60) * 60
+  // If no end_time, default to 30 minutes (half slot)
+  if (!task.endTime || !task.startTime) {
+    return '30px'
+  }
+
+  const start = new Date(task.startTime)
+  const end = new Date(task.endTime)
+  const durationMinutes = (end.getTime() - start.getTime()) / (1000 * 60)
+
+  // 60px per hour
+  const height = (durationMinutes / 60) * 60
   return `${Math.max(height, 30)}px`
 }
 
@@ -250,12 +275,19 @@ function formatHour(hour: number): string {
 }
 
 function formatTaskTime(task: Task): string {
-  if (!task.dueTime) return ''
-  const duration = task.duration || 60
-  const [hour, minute] = task.dueTime.split(':').map(Number)
-  const endHour = Math.floor((hour * 60 + minute + duration) / 60)
-  const endMinute = (hour * 60 + minute + duration) % 60
-  return `${task.dueTime}-${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`
+  if (!task.startTime) return ''
+
+  const start = new Date(task.startTime)
+  const startStr = `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')}`
+
+  if (!task.endTime) {
+    return startStr
+  }
+
+  const end = new Date(task.endTime)
+  const endStr = `${end.getHours().toString().padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}`
+
+  return `${startStr}-${endStr}`
 }
 
 function isToday(date: Date): boolean {
@@ -292,10 +324,20 @@ function handleTaskClick(task: Task) {
 }
 
 function handleDragStart(task: Task, event: DragEvent) {
+  draggingTask.value = task
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('taskId', task.id)
+    // Make drag image transparent to show preview instead
+    const img = new Image()
+    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+    event.dataTransfer.setDragImage(img, 0, 0)
   }
+}
+
+function handleDragEnd() {
+  draggingTask.value = null
+  dragOverSlot.value = null
 }
 
 function handleDragOver(event: DragEvent) {
@@ -303,14 +345,36 @@ function handleDragOver(event: DragEvent) {
   if (event.dataTransfer) {
     event.dataTransfer.dropEffect = 'move'
   }
+
+  // Update drag preview position
+  const target = event.currentTarget as HTMLElement
+  if (target) {
+    const slotKey = target.getAttribute('data-slot-key')
+    if (slotKey) {
+      dragOverSlot.value = slotKey
+    }
+  }
+}
+
+function handleDragLeave(event: DragEvent) {
+  // Clear preview when leaving slot
+  const target = event.currentTarget as HTMLElement
+  const relatedTarget = event.relatedTarget as HTMLElement
+
+  // Only clear if we're actually leaving the slot (not just entering a child)
+  if (!target.contains(relatedTarget)) {
+    dragOverSlot.value = null
+  }
 }
 
 function handleDrop(date: Date, hour: number, event: DragEvent) {
   event.preventDefault()
+  dragOverSlot.value = null
   const taskId = event.dataTransfer?.getData('taskId')
   if (taskId) {
     emit('task-drop', taskId, date, hour)
   }
+  draggingTask.value = null
 }
 </script>
 
@@ -318,7 +382,7 @@ function handleDrop(date: Date, hour: number, event: DragEvent) {
 @import '@/assets/styles/variables.scss';
 @import '@/assets/styles/mixins.scss';
 
-.week-calendar {
+.week-schedule {
   display: flex;
   flex-direction: column;
   gap: $spacing-lg;
@@ -327,7 +391,7 @@ function handleDrop(date: Date, hour: number, event: DragEvent) {
 // ============================================
 // Header
 // ============================================
-.calendar-header {
+.schedule-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -342,9 +406,9 @@ function handleDrop(date: Date, hour: number, event: DragEvent) {
 }
 
 // ============================================
-// Calendar Grid
+// Schedule Grid
 // ============================================
-.calendar-grid {
+.schedule-grid {
   display: grid;
   grid-template-columns: 60px repeat(7, 1fr);
   gap: 0;
@@ -452,9 +516,58 @@ function handleDrop(date: Date, hour: number, event: DragEvent) {
 }
 
 // ============================================
-// Calendar Task
+// Drag Preview
 // ============================================
-.calendar-task {
+.drag-preview {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba($color-primary, 0.1);
+  border: 2px dashed $color-primary;
+  border-radius: $radius-sm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  pointer-events: none;
+
+  .drag-preview-task {
+    background-color: white;
+    padding: $spacing-sm;
+    border-radius: $radius-sm;
+    box-shadow: $shadow-md;
+    max-width: 90%;
+
+    .task-title {
+      font-size: $font-size-sm;
+      font-weight: 500;
+      color: $color-text-primary;
+      margin-bottom: $spacing-xs;
+      @include text-ellipsis;
+    }
+
+    .task-project {
+      display: flex;
+      align-items: center;
+      gap: $spacing-xs;
+      font-size: $font-size-xs;
+      color: $color-text-secondary;
+
+      .project-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: $radius-round;
+      }
+    }
+  }
+}
+
+// ============================================
+// Schedule Task
+// ============================================
+.schedule-task {
   position: absolute;
   left: 4px;
   right: 4px;

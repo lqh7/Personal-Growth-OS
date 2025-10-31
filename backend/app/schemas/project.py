@@ -10,6 +10,7 @@ class ProjectBase(BaseModel):
     """Base schema for Project with common fields."""
     name: str = Field(..., max_length=255)
     description: Optional[str] = None
+    color: Optional[str] = Field(default="#667eea", max_length=7)
 
 
 class ProjectCreate(ProjectBase):
@@ -21,6 +22,7 @@ class ProjectUpdate(BaseModel):
     """Schema for updating an existing project."""
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
+    color: Optional[str] = Field(None, max_length=7)
 
 
 class Project(ProjectBase):

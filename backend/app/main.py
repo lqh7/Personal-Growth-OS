@@ -15,14 +15,14 @@ async def lifespan(app: FastAPI):
     Lifespan context manager for startup and shutdown events.
     """
     # Startup: Initialize database
-    print("🚀 Initializing Personal Growth OS...")
+    print("Initializing Personal Growth OS...")
     init_db()
-    print("✅ Database initialized")
+    print("Database initialized")
 
     yield
 
     # Shutdown
-    print("👋 Shutting down Personal Growth OS...")
+    print("Shutting down Personal Growth OS...")
 
 
 # Create FastAPI application
@@ -64,10 +64,11 @@ async def health_check():
 
 
 # Import and include routers
-from app.api.endpoints import tasks, notes
+from app.api.endpoints import tasks, notes, projects
 
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
+app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 
 # TODO: Additional routers to be implemented
 # from app.api.endpoints import chat, review

@@ -28,6 +28,64 @@ export const useProjectStore = defineStore('project', () => {
     }
   }
 
+  async function createProject(data: {
+    name: string
+    description?: string
+    color: string
+  }) {
+    loading.value = true
+    error.value = null
+
+    try {
+      const response = await apiClient.post('/projects/', data)
+      projects.value.push(response.data)
+      return response.data
+    } catch (e: any) {
+      error.value = e.message || 'Failed to create project'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function updateProject(id: number, data: {
+    name?: string
+    description?: string
+    color?: string
+  }) {
+    loading.value = true
+    error.value = null
+
+    try {
+      const response = await apiClient.put(`/projects/${id}`, data)
+      const index = projects.value.findIndex(p => p.id === id)
+      if (index !== -1) {
+        projects.value[index] = response.data
+      }
+      return response.data
+    } catch (e: any) {
+      error.value = e.message || 'Failed to update project'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function deleteProject(id: number) {
+    loading.value = true
+    error.value = null
+
+    try {
+      await apiClient.delete(`/projects/${id}`)
+      projects.value = projects.value.filter(p => p.id !== id)
+    } catch (e: any) {
+      error.value = e.message || 'Failed to delete project'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   function getProjectById(id: number) {
     return projects.value.find(p => p.id === id)
   }
@@ -40,6 +98,9 @@ export const useProjectStore = defineStore('project', () => {
 
     // Actions
     fetchProjects,
+    createProject,
+    updateProject,
+    deleteProject,
     getProjectById
   }
 })

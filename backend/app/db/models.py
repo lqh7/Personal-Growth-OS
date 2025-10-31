@@ -32,6 +32,12 @@ class Project(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
+    color: Mapped[str] = mapped_column(
+        String(7),
+        nullable=True,
+        default="#667eea",
+        comment="Project color identifier (hex color code)"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -60,6 +66,16 @@ class Task(Base):
     )
     priority: Mapped[int] = mapped_column(Integer, default=3)  # 1=highest, 5=lowest
     due_date: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    start_time: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="Schedule start time - when the task is planned to begin"
+    )
+    end_time: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="Schedule end time - when the task is planned to finish (optional)"
+    )
     snooze_until: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=True,

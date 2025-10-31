@@ -13,6 +13,8 @@ class TaskBase(BaseModel):
     status: str = Field(default="pending", pattern="^(pending|in_progress|completed|cancelled)$")
     priority: int = Field(default=3, ge=1, le=5)
     due_date: Optional[datetime] = None
+    start_time: Optional[datetime] = Field(None, description="Schedule start time")
+    end_time: Optional[datetime] = Field(None, description="Schedule end time (optional)")
     snooze_until: Optional[datetime] = None
     parent_task_id: Optional[int] = None
     project_id: Optional[int] = None
@@ -30,6 +32,8 @@ class TaskUpdate(BaseModel):
     status: Optional[str] = Field(None, pattern="^(pending|in_progress|completed|cancelled)$")
     priority: Optional[int] = Field(None, ge=1, le=5)
     due_date: Optional[datetime] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
     snooze_until: Optional[datetime] = None
     parent_task_id: Optional[int] = None
     project_id: Optional[int] = None

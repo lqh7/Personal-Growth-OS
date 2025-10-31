@@ -162,7 +162,12 @@
         </el-table-column>
         <el-table-column prop="project" label="项目" width="150">
           <template #default="scope">
-            <el-tag v-if="scope.row.project" size="small" :color="scope.row.project.color">
+            <el-tag
+              v-if="scope.row.project"
+              size="small"
+              class="project-tag"
+              :style="{ borderLeftColor: scope.row.project.color }"
+            >
               {{ scope.row.project.name }}
             </el-tag>
           </template>
@@ -325,7 +330,52 @@
           </div>
         </transition>
       </div>
+
+      <!-- Add Project Button at bottom of tree view -->
+      <div class="add-project-section">
+        <el-button
+          class="add-project-btn"
+          @click="showProjectDialog = true"
+        >
+          <el-icon><FolderAdd /></el-icon>
+          <span>新建项目</span>
+        </el-button>
+      </div>
     </div>
+
+    <!-- Project Creation/Edit Dialog -->
+    <el-dialog
+      v-model="showProjectDialog"
+      :title="editingProject ? '编辑项目' : '新建项目'"
+      width="500px"
+      :close-on-click-modal="false"
+    >
+      <el-form :model="projectForm" label-width="80px">
+        <el-form-item label="项目名称" required>
+          <el-input v-model="projectForm.name" placeholder="请输入项目名称" />
+        </el-form-item>
+
+        <el-form-item label="项目描述">
+          <el-input
+            v-model="projectForm.description"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入项目描述（可选）"
+          />
+        </el-form-item>
+
+        <el-form-item label="项目颜色">
+          <el-color-picker v-model="projectForm.color" show-alpha />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="closeProjectDialog">取消</el-button>
+        <el-button type="primary" @click="handleSaveProject">
+          {{ editingProject ? '保存' : '创建' }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- Task Ignition Dialog -->
     <el-dialog
@@ -500,8 +550,8 @@
           />
         </el-form-item>
 
-        <el-form-item label="所属项目">
-          <el-select v-model="taskForm.projectId" placeholder="选择项目（可选）" clearable style="width: 100%">
+        <el-form-item label="所属项目" required>
+          <el-select v-model="taskForm.projectId" placeholder="选择项目" style="width: 100%">
             <el-option
               v-for="project in projects"
               :key="project.id"
@@ -518,6 +568,24 @@
 
         <el-form-item label="优先级">
           <el-rate v-model="taskForm.priority" :max="5" show-text />
+        </el-form-item>
+
+        <el-form-item label="开始时间" required>
+          <el-date-picker
+            v-model="taskForm.startTime"
+            type="datetime"
+            placeholder="选择任务开始时间（必填）"
+            style="width: 100%"
+          />
+        </el-form-item>
+
+        <el-form-item label="结束时间">
+          <el-date-picker
+            v-model="taskForm.endTime"
+            type="datetime"
+            placeholder="选择任务结束时间（可选）"
+            style="width: 100%"
+          />
         </el-form-item>
 
         <el-form-item label="截止时间">
@@ -558,7 +626,8 @@ import {
   MoreFilled,
   InfoFilled,
   Clock,
-  Timer
+  Timer,
+  FolderAdd
 } from '@element-plus/icons-vue'
 import TaskCard from '@/components/tasks/TaskCard.vue'
 import { useTaskStore } from '@/stores/taskStore'
@@ -622,12 +691,14 @@ const showIgniteDialog = ref(false)
 const showIgnitionResult = ref(false)
 const showSnoozeDialog = ref(false)
 const showTaskDialog = ref(false)
+const showProjectDialog = ref(false)
 
 const igniting = ref(false)
 const currentSnoozeTaskId = ref<string | null>(null)
 const noProjectExpanded = ref(true)
 const customSnoozeDate = ref<Date | null>(null)
 const editingTask = ref<Task | null>(null)
+const editingProject = ref<any>(null)
 
 const igniteForm = ref({
   description: ''
@@ -640,16 +711,16 @@ const taskForm = ref({
   description: '',
   priority: 3,
   projectId: '',
-  dueDate: null as Date | null,
-  dueTime: ''
+  startTime: null as Date | null,
+  endTime: null as Date | null,
+  dueDate: null as Date | null
 })
 
-// Mock data
-const projects = ref([
-  { id: '1', name: '工作项目', color: '#667eea' },
-  { id: '2', name: '个人学习', color: '#f093fb' },
-  { id: '3', name: '健康管理', color: '#4facfe' }
-])
+const projectForm = ref({
+  name: '',
+  description: '',
+  color: '#667eea'
+})
 
 // Computed: Convert API tasks to View tasks
 const allTasks = computed(() => {
@@ -726,6 +797,17 @@ const kanbanColumns = computed<KanbanColumn[]>(() => [
   }
 ])
 
+// Get projects from project store
+const projects = computed(() => {
+  return projectStore.projects.map(p => ({
+    id: String(p.id),
+    name: p.name,
+    color: p.color,
+    description: p.description,
+    expanded: true
+  }))
+})
+
 // Project tree data with expanded state
 const projectTreeData = computed(() => {
   return projects.value.map(project => {
@@ -769,13 +851,16 @@ function handleSearch() {
 
 function handleQuickCreate() {
   editingTask.value = null
+  // Set default project to "未分配任务" (id: 1)
+  const defaultProject = projects.value.find(p => p.name === '未分配任务')
   taskForm.value = {
     title: '',
     description: '',
     priority: 3,
-    projectId: '',
-    dueDate: null,
-    dueTime: ''
+    projectId: defaultProject?.id || '1',
+    startTime: null,
+    endTime: null,
+    dueDate: null
   }
   showTaskDialog.value = true
 }
@@ -846,8 +931,9 @@ function handleTaskClick(taskId: string) {
       description: task.description || '',
       priority: task.priority,
       projectId: task.project?.id || '',
-      dueDate: task.dueDate || null,
-      dueTime: task.dueTime || ''
+      startTime: task.startTime || null,
+      endTime: task.endTime || null,
+      dueDate: task.dueDate || null
     }
     showTaskDialog.value = true
   }
@@ -1012,8 +1098,9 @@ function handleQuickAddToProject(projectId: string) {
     description: '',
     priority: 3,
     projectId: projectId,
-    dueDate: null,
-    dueTime: ''
+    startTime: null,
+    endTime: null,
+    dueDate: null
   }
   showTaskDialog.value = true
 }
@@ -1024,13 +1111,19 @@ async function handleSaveTask() {
     return
   }
 
+  if (!taskForm.value.projectId) {
+    ElMessage.warning('请选择所属项目')
+    return
+  }
+
   try {
     const taskData = {
       title: taskForm.value.title,
       description: taskForm.value.description,
       priority: taskForm.value.priority,
+      startTime: taskForm.value.startTime,
+      endTime: taskForm.value.endTime,
       dueDate: taskForm.value.dueDate,
-      dueTime: taskForm.value.dueTime,
       project: taskForm.value.projectId ? {
         id: taskForm.value.projectId,
         name: '',
@@ -1060,6 +1153,48 @@ async function handleSaveTask() {
 function closeTaskDialog() {
   showTaskDialog.value = false
   editingTask.value = null
+}
+
+async function handleSaveProject() {
+  if (!projectForm.value.name.trim()) {
+    ElMessage.warning('请输入项目名称')
+    return
+  }
+
+  try {
+    if (editingProject.value) {
+      // 编辑现有项目
+      await projectStore.updateProject(Number(editingProject.value.id), {
+        name: projectForm.value.name,
+        description: projectForm.value.description,
+        color: projectForm.value.color
+      })
+      ElMessage.success('项目已更新')
+    } else {
+      // 创建新项目
+      await projectStore.createProject({
+        name: projectForm.value.name,
+        description: projectForm.value.description,
+        color: projectForm.value.color
+      })
+      ElMessage.success('项目已创建')
+    }
+
+    showProjectDialog.value = false
+    closeProjectDialog()
+  } catch (error) {
+    ElMessage.error('保存项目失败')
+  }
+}
+
+function closeProjectDialog() {
+  showProjectDialog.value = false
+  editingProject.value = null
+  projectForm.value = {
+    name: '',
+    description: '',
+    color: '#667eea'
+  }
 }
 
 onMounted(() => {
@@ -1274,6 +1409,15 @@ onMounted(() => {
   border-radius: $radius-lg;
   box-shadow: $shadow-sm;
   padding: $spacing-lg;
+
+  .project-tag {
+    border: 1px solid $color-border;
+    border-left-width: 3px;
+    font-size: $font-size-xs;
+    background-color: $bg-color-card;
+    color: $color-text-primary;
+    font-weight: 500;
+  }
 }
 
 .task-title-cell {
@@ -1679,6 +1823,29 @@ onMounted(() => {
     p {
       margin: 0;
       font-size: $font-size-sm;
+    }
+  }
+}
+
+// Add Project Section
+.add-project-section {
+  padding: $spacing-lg;
+  border-top: 1px solid $color-border;
+
+  .add-project-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: $spacing-sm;
+    border: 2px dashed $color-border;
+    color: $color-text-secondary;
+    background-color: transparent;
+
+    &:hover {
+      border-color: $color-primary;
+      color: $color-primary;
+      background-color: rgba($color-primary, 0.05);
     }
   }
 }

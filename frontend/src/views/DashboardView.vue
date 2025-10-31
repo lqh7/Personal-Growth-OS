@@ -36,13 +36,13 @@
 
     <!-- Main Content Grid -->
     <div class="content-grid">
-      <!-- Week Calendar -->
-      <div class="calendar-section card">
+      <!-- Week Schedule -->
+      <div class="schedule-section card">
         <div class="section-header">
-          <h3 class="section-title">本周日历</h3>
+          <h3 class="section-title">本周日程</h3>
           <el-button text type="primary" @click="router.push('/tasks')">查看更多</el-button>
         </div>
-        <WeekCalendar
+        <WeekSchedule
           :tasks="calendarTasks"
           @task-click="handleTaskClick"
           @task-complete="handleTaskComplete"
@@ -129,7 +129,7 @@ import {
   InfoFilled,
   SuccessFilled
 } from '@element-plus/icons-vue'
-import WeekCalendar from '@/components/calendar/WeekCalendar.vue'
+import WeekSchedule from '@/components/schedule/WeekSchedule.vue'
 import { useTaskStore } from '@/stores/taskStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useTaskAdapter, type ViewTask } from '@/composables/useTaskAdapter'
@@ -298,7 +298,7 @@ const recentActivities = ref<Activity[]>([
   }
 ])
 
-// Calendar tasks - tasks with due dates (excluding snoozed tasks)
+// Calendar tasks - tasks with start times (excluding snoozed tasks)
 const calendarTasks = computed(() => {
   const now = new Date()
   return taskStore.tasks
@@ -307,24 +307,10 @@ const calendarTasks = computed(() => {
       if (task.status === 'completed') return false
       // Exclude snoozed tasks (they appear in floating tasks)
       if (task.snooze_until && new Date(task.snooze_until) > now) return false
-      // Include tasks with due dates
-      return task.due_date !== undefined
+      // Include tasks with start times
+      return task.start_time !== undefined
     })
-    .map(task => {
-      const viewTask = toViewTask(task)
-      return {
-        id: viewTask.id,
-        title: viewTask.title,
-        description: viewTask.description,
-        status: viewTask.status,
-        priority: viewTask.priority,
-        dueDate: viewTask.dueDate,
-        dueTime: viewTask.dueTime,
-        duration: 60, // Default duration
-        completed: viewTask.completed,
-        project: viewTask.project
-      }
-    })
+    .map(task => toViewTask(task))
 })
 
 // ============================================
@@ -433,17 +419,23 @@ function handleDragStart(task: FloatingTask, event: DragEvent) {
 
 async function handleTaskDrop(taskId: string, date: Date, hour: number) {
   try {
-    // Set the new due date and time
-    const dueDate = new Date(date)
-    dueDate.setHours(hour, 0, 0, 0)
+    // Set the new start time
+    const startTime = new Date(date)
+    startTime.setHours(hour, 0, 0, 0)
 
-    // Update task: set due date and clear snooze
+    // Set end time (default to 1 hour after start)
+    const endTime = new Date(startTime)
+    endTime.setHours(hour + 1, 0, 0, 0)
+
+    // Update task: set start_time, end_time, and clear snooze
     await taskStore.updateTask(Number(taskId), {
-      due_date: dueDate.toISOString(),
+      start_time: startTime.toISOString(),
+      end_time: endTime.toISOString(),
       snooze_until: null
     })
 
     ElMessage.success(`任务已安排到 ${date.toLocaleDateString('zh-CN')} ${hour}:00`)
+    await loadTasks() // Reload tasks to reflect changes
   } catch (error) {
     ElMessage.error('更新任务时间失败')
   }
@@ -617,9 +609,9 @@ async function handleTaskDrop(taskId: string, date: Date, hour: number) {
 }
 
 // ============================================
-// Calendar Section
+// Schedule Section
 // ============================================
-.calendar-section {
+.schedule-section {
   grid-column: 1 / -1;
 }
 
