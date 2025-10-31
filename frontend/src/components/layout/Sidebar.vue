@@ -7,7 +7,7 @@
     <!-- Logo和品牌 -->
     <div class="sidebar-header">
       <div class="logo-container">
-        <el-icon class="logo-icon" :size="32"><Rocket /></el-icon>
+        <el-icon class="logo-icon" :size="32"><ChatLineRound /></el-icon>
         <transition name="fade">
           <div v-show="!uiStore.sidebarCollapsed" class="logo-text">
             <div class="brand-name">Personal Growth</div>
@@ -49,15 +49,48 @@
           class="conversation-item"
           :class="{ active: conv.isActive }"
           @click="chatStore.switchConversation(conv.id)"
+          @contextmenu.prevent="handleContextMenu($event, conv)"
         >
           <el-icon class="conv-icon" :size="18">
             <ChatDotRound />
           </el-icon>
           <transition name="fade">
             <div v-show="!uiStore.sidebarCollapsed" class="conv-content">
-              <div class="conv-title">{{ conv.title }}</div>
+              <div
+                v-if="editingConvId === conv.id"
+                class="conv-title-edit"
+                @click.stop
+              >
+                <el-input
+                  v-model="editingTitle"
+                  size="small"
+                  @blur="saveTitle(conv.id)"
+                  @keyup.enter="saveTitle(conv.id)"
+                  @keyup.esc="cancelEdit"
+                  ref="titleInputRef"
+                />
+              </div>
+              <div
+                v-else
+                class="conv-title"
+                @dblclick.stop="startEdit(conv)"
+              >
+                {{ conv.title }}
+              </div>
               <div class="conv-time">{{ formatTime(conv.timestamp) }}</div>
             </div>
+          </transition>
+
+          <!-- 删除按钮 - hover时显示 -->
+          <transition name="fade">
+            <el-icon
+              v-show="!uiStore.sidebarCollapsed"
+              class="delete-icon"
+              :size="16"
+              @click.stop="handleDelete(conv.id)"
+            >
+              <Delete />
+            </el-icon>
           </transition>
         </div>
       </div>
@@ -100,12 +133,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUiStore } from '@/stores/uiStore'
-import { useChatStore } from '@/stores/chatStore'
+import { useChatStore, type Conversation } from '@/stores/chatStore'
 import {
-  Rocket,
   HomeFilled,
   List,
   Document,
@@ -114,8 +146,10 @@ import {
   ChatDotRound,
   Plus,
   DArrowLeft,
-  DArrowRight
+  DArrowRight,
+  Delete
 } from '@element-plus/icons-vue'
+import { ElMessageBox } from 'element-plus'
 
 // ============================================
 // Stores
@@ -133,6 +167,11 @@ const navItems = [
   { path: '/notes', label: '笔记', icon: Document },
   { path: '/review', label: '复盘', icon: DataAnalysis }
 ]
+
+// 标题编辑相关
+const editingConvId = ref<string | null>(null)
+const editingTitle = ref('')
+const titleInputRef = ref<any>(null)
 
 // ============================================
 // Computed
@@ -181,6 +220,48 @@ function startResize(e: MouseEvent) {
 
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
+}
+
+// 标题编辑功能
+function startEdit(conv: Conversation) {
+  editingConvId.value = conv.id
+  editingTitle.value = conv.title
+  nextTick(() => {
+    titleInputRef.value?.focus()
+  })
+}
+
+function saveTitle(convId: string) {
+  if (editingTitle.value.trim()) {
+    chatStore.updateConversationTitle(convId, editingTitle.value.trim())
+  }
+  editingConvId.value = null
+  editingTitle.value = ''
+}
+
+function cancelEdit() {
+  editingConvId.value = null
+  editingTitle.value = ''
+}
+
+function handleContextMenu(e: MouseEvent, conv: Conversation) {
+  // 简化版：直接触发编辑
+  startEdit(conv)
+}
+
+// 删除对话
+function handleDelete(convId: string) {
+  ElMessageBox.confirm('确定要删除这个对话吗？', '确认删除', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
+    .then(() => {
+      chatStore.deleteConversation(convId)
+    })
+    .catch(() => {
+      // 取消删除
+    })
 }
 </script>
 
@@ -319,6 +400,7 @@ function startResize(e: MouseEvent) {
       border-radius: $radius-md;
       cursor: pointer;
       transition: all $transition-fast;
+      position: relative;
 
       .conv-icon {
         flex-shrink: 0;
@@ -342,8 +424,24 @@ function startResize(e: MouseEvent) {
         }
       }
 
+      .delete-icon {
+        flex-shrink: 0;
+        color: $color-text-tertiary;
+        opacity: 0;
+        transition: all $transition-fast;
+        cursor: pointer;
+
+        &:hover {
+          color: $color-danger;
+        }
+      }
+
       &:hover {
         background-color: rgba($color-primary, 0.05);
+
+        .delete-icon {
+          opacity: 1;
+        }
       }
 
       &.active {

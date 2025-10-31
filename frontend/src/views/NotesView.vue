@@ -2,51 +2,127 @@
   <div class="notes-view">
     <!-- Header with actions -->
     <div class="view-header">
-      <el-button type="primary" @click="showCreateDialog = true">
-        <el-icon><Plus /></el-icon>
-        创建笔记
-      </el-button>
-      <el-input
-        v-model="searchQuery"
-        placeholder="语义搜索笔记..."
-        style="width: 300px; margin-left: 12px"
-        @keyup.enter="handleSearch"
-      >
-        <template #append>
-          <el-button @click="handleSearch" :loading="noteStore.loading">
+      <div class="header-left">
+        <h1 class="page-title">笔记管理</h1>
+        <div class="header-stats">
+          <span class="stat-item">共 {{ noteStore.notes.length }} 条</span>
+          <span v-if="selectedTags.length > 0" class="stat-divider">·</span>
+          <span v-if="selectedTags.length > 0" class="stat-item">已筛选 {{ filteredNotes.length }} 条</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <el-button type="primary" @click="showCreateDialog = true">
+          <el-icon><Plus /></el-icon>
+          创建笔记
+        </el-button>
+      </div>
+    </div>
+
+    <!-- Filters Bar -->
+    <div class="filters-bar">
+      <div class="filters-left">
+        <el-input
+          v-model="searchQuery"
+          placeholder="语义搜索笔记..."
+          clearable
+          style="width: 300px"
+          @keyup.enter="handleSearch"
+          @clear="clearSearch"
+        >
+          <template #prefix>
             <el-icon><Search /></el-icon>
+          </template>
+          <template #append>
+            <el-button @click="handleSearch" :loading="noteStore.loading">
+              搜索
+            </el-button>
+          </template>
+        </el-input>
+
+        <el-select
+          v-model="selectedTags"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          placeholder="按标签筛选"
+          clearable
+          style="width: 240px"
+        >
+          <el-option
+            v-for="tag in noteStore.tags"
+            :key="tag.id"
+            :label="tag.name"
+            :value="tag.id"
+          >
+            <span class="tag-option">
+              <span class="tag-color-dot" :style="{ backgroundColor: tag.color }"></span>
+              {{ tag.name }}
+            </span>
+          </el-option>
+        </el-select>
+
+        <el-select v-model="sortBy" placeholder="排序" style="width: 150px">
+          <el-option label="最新更新" value="updated_at" />
+          <el-option label="最早创建" value="created_at" />
+          <el-option label="标题 A-Z" value="title" />
+        </el-select>
+      </div>
+
+      <div class="filters-right">
+        <el-button-group>
+          <el-button :type="viewMode === 'grid' ? 'primary' : ''" @click="viewMode = 'grid'">
+            <el-icon><Grid /></el-icon>
+            网格
           </el-button>
-        </template>
-      </el-input>
-    </div>
-
-    <!-- Search Results -->
-    <div v-if="searchResults.length > 0" class="search-results">
-      <h3>搜索结果</h3>
-      <el-button text @click="clearSearch">清除</el-button>
-      <div class="notes-grid">
-        <NoteCard
-          v-for="result in searchResults"
-          :key="result.note.id"
-          :note="result.note"
-          :similarity-score="result.similarity_score"
-          @click="handleNoteClick(result.note)"
-        />
+          <el-button :type="viewMode === 'list' ? 'primary' : ''" @click="viewMode = 'list'">
+            <el-icon><List /></el-icon>
+            列表
+          </el-button>
+        </el-button-group>
       </div>
     </div>
 
-    <!-- All Notes -->
-    <div v-else>
-      <h3>所有笔记</h3>
-      <div class="notes-grid">
-        <NoteCard
-          v-for="note in noteStore.notes"
-          :key="note.id"
-          :note="note"
-          @click="handleNoteClick(note)"
+    <!-- Notes Display -->
+    <div class="notes-content">
+      <!-- Search Results -->
+      <div v-if="searchResults.length > 0" class="search-results-section">
+        <div class="section-header">
+          <h3>
+            <el-icon><Search /></el-icon>
+            搜索结果 ({{ searchResults.length }})
+          </h3>
+          <el-button text @click="clearSearch">清除搜索</el-button>
+        </div>
+        <div :class="viewMode === 'grid' ? 'notes-grid' : 'notes-list'">
+          <NoteCard
+            v-for="result in searchResults"
+            :key="result.note.id"
+            :note="result.note"
+            :similarity-score="result.similarity_score"
+            @click="handleNoteClick(result.note)"
+          />
+        </div>
+      </div>
+
+      <!-- Filtered Notes -->
+      <div v-else>
+        <div :class="viewMode === 'grid' ? 'notes-grid' : 'notes-list'">
+          <NoteCard
+            v-for="note in filteredNotes"
+            :key="note.id"
+            :note="note"
+            @click="handleNoteClick(note)"
+          />
+        </div>
+        <el-empty
+          v-if="filteredNotes.length === 0 && noteStore.notes.length === 0"
+          description="暂无笔记，点击右上角创建第一条笔记"
+        />
+        <el-empty
+          v-else-if="filteredNotes.length === 0"
+          description="没有找到符合条件的笔记"
         />
       </div>
-      <el-empty v-if="noteStore.notes.length === 0" description="暂无笔记" />
     </div>
 
     <!-- Create/Edit Dialog -->
@@ -128,27 +204,61 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, Link } from '@element-plus/icons-vue'
+import { Plus, Search, Link, Grid, List } from '@element-plus/icons-vue'
 import { useNoteStore } from '@/stores/noteStore'
 import NoteCard from '@/components/notes/NoteCard.vue'
 import type { Note, RelatedNote } from '@/types'
 
 const noteStore = useNoteStore()
 
+// ============================================
+// State
+// ============================================
 const showCreateDialog = ref(false)
 const showViewDialog = ref(false)
 const searchQuery = ref('')
 const searchResults = ref<RelatedNote[]>([])
 const editingNote = ref<Note | null>(null)
 const viewingNote = ref<Note | null>(null)
+const selectedTags = ref<number[]>([])
+const sortBy = ref('updated_at')
+const viewMode = ref<'grid' | 'list'>('grid')
 
 const noteForm = ref({
   title: '',
   content: '',
   source_url: '',
   tag_names: [] as string[]
+})
+
+// ============================================
+// Computed
+// ============================================
+const filteredNotes = computed(() => {
+  let notes = [...noteStore.notes]
+
+  // Filter by tags
+  if (selectedTags.value.length > 0) {
+    notes = notes.filter(note =>
+      note.tags.some(tag => selectedTags.value.includes(tag.id))
+    )
+  }
+
+  // Sort
+  notes.sort((a, b) => {
+    if (sortBy.value === 'updated_at') {
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    } else if (sortBy.value === 'created_at') {
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    } else if (sortBy.value === 'title') {
+      return a.title.localeCompare(b.title)
+    }
+    return 0
+  })
+
+  return notes
 })
 
 onMounted(async () => {
@@ -250,65 +360,160 @@ function closeDialog() {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
+@import '@/assets/styles/variables.scss';
+@import '@/assets/styles/mixins.scss';
+
 .notes-view {
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
 }
 
+// ============================================
+// Header
+// ============================================
 .view-header {
-  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: $spacing-xl;
+
+  .header-left {
+    .page-title {
+      font-size: $font-size-xxl;
+      font-weight: 600;
+      color: $color-text-primary;
+      margin: 0 0 $spacing-sm 0;
+    }
+
+    .header-stats {
+      display: flex;
+      align-items: center;
+      gap: $spacing-md;
+      font-size: $font-size-sm;
+      color: $color-text-secondary;
+
+      .stat-divider {
+        color: $color-text-tertiary;
+      }
+    }
+  }
+
+  .header-actions {
+    display: flex;
+    gap: $spacing-md;
+  }
+}
+
+// ============================================
+// Filters
+// ============================================
+.filters-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: $spacing-xl;
+  padding: $spacing-lg;
+  background-color: $bg-color-card;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+
+  .filters-left {
+    display: flex;
+    gap: $spacing-md;
+    flex: 1;
+  }
+
+  .filters-right {
+    flex-shrink: 0;
+  }
+}
+
+.tag-option {
   display: flex;
   align-items: center;
+  gap: $spacing-sm;
+
+  .tag-color-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: $radius-round;
+  }
 }
 
-.search-results {
-  background: #fff;
-  padding: 20px;
-  border-radius: 8px;
-  margin-bottom: 24px;
+// ============================================
+// Notes Content
+// ============================================
+.notes-content {
+  min-height: 400px;
 }
 
-.search-results h3 {
-  display: inline-block;
-  margin-right: 12px;
+.search-results-section {
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: $spacing-lg;
+    padding: $spacing-md $spacing-lg;
+    background-color: rgba($color-primary, 0.05);
+    border-radius: $radius-md;
+    border-left: 4px solid $color-primary;
+
+    h3 {
+      display: flex;
+      align-items: center;
+      gap: $spacing-sm;
+      margin: 0;
+      font-size: $font-size-lg;
+      font-weight: 600;
+      color: $color-primary;
+    }
+  }
 }
 
 .notes-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
-  margin-top: 16px;
+  gap: $spacing-lg;
 }
 
-h3 {
-  color: #303133;
-  margin-bottom: 16px;
+.notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
 }
 
+// ============================================
+// Dialog Styles
+// ============================================
 .note-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin: 16px 0;
+  gap: $spacing-md;
+  margin: $spacing-lg 0;
 }
 
 .source-link {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 14px;
-  color: #409eff;
-}
+  gap: $spacing-xs;
+  font-size: $font-size-sm;
+  color: $color-primary;
 
-.source-link a {
-  color: #409eff;
-  text-decoration: none;
+  a {
+    color: $color-primary;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
 }
 
 .note-content {
   white-space: pre-wrap;
   line-height: 1.6;
-  color: #606266;
+  color: $color-text-regular;
+  font-size: $font-size-sm;
 }
 </style>

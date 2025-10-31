@@ -31,6 +31,7 @@ export interface Conversation {
   timestamp: Date
   isActive: boolean
   context: 'dashboard' | 'task' | 'note' | 'review'
+  messages?: Message[] // 存储该对话的历史消息（实际项目中应从后端加载）
 }
 
 // ============================================
@@ -47,7 +48,21 @@ export const useChatStore = defineStore('chat', () => {
       lastMessage: '我来帮你规划一下今天的任务',
       timestamp: new Date(Date.now() - 5 * 60 * 1000), // 5分钟前
       isActive: true,
-      context: 'dashboard'
+      context: 'dashboard',
+      messages: [
+        {
+          id: '1-1',
+          role: 'user',
+          content: '今天的任务',
+          timestamp: new Date(Date.now() - 10 * 60 * 1000)
+        },
+        {
+          id: '1-2',
+          role: 'assistant',
+          content: '我来帮你规划一下今天的任务。你今天想完成什么呢？',
+          timestamp: new Date(Date.now() - 5 * 60 * 1000)
+        }
+      ]
     },
     {
       id: '2',
@@ -55,26 +70,44 @@ export const useChatStore = defineStore('chat', () => {
       lastMessage: '找到了3条相关笔记',
       timestamp: new Date(Date.now() - 60 * 60 * 1000), // 1小时前
       isActive: false,
-      context: 'note'
-    }
-  ])
-
-  const currentConversationId = ref<string | null>('1')
-  const messages = ref<Message[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: '你好！我是你的AI助手。你今天想完成什么任务呢？',
-      timestamp: new Date(Date.now() - 10 * 60 * 1000),
-      actions: [
+      context: 'note',
+      messages: [
         {
-          type: 'create_task',
-          label: '创建任务',
-          payload: {}
+          id: '2-1',
+          role: 'user',
+          content: '帮我整理一下笔记',
+          timestamp: new Date(Date.now() - 70 * 60 * 1000)
+        },
+        {
+          id: '2-2',
+          role: 'assistant',
+          content: '找到了3条相关笔记，让我帮你分类整理一下。',
+          timestamp: new Date(Date.now() - 60 * 60 * 1000)
         }
       ]
     }
   ])
+
+  const currentConversationId = ref<string | null>('1')
+
+  // 初始化messages为第一个对话的历史消息
+  const messages = ref<Message[]>(
+    conversations.value[0]?.messages || [
+      {
+        id: '1',
+        role: 'assistant',
+        content: '你好！我是你的AI助手。你今天想完成什么任务呢？',
+        timestamp: new Date(Date.now() - 10 * 60 * 1000),
+        actions: [
+          {
+            type: 'create_task',
+            label: '创建任务',
+            payload: {}
+          }
+        ]
+      }
+    ]
+  )
   const loading = ref(false)
 
   // ============================================
@@ -145,21 +178,36 @@ export const useChatStore = defineStore('chat', () => {
    * @param id - 对话ID
    */
   function switchConversation(id: string) {
+    // 保存当前对话的消息到conversation
+    if (currentConversation.value && messages.value.length > 0) {
+      currentConversation.value.messages = [...messages.value]
+    }
+
     currentConversationId.value = id
     // 标记当前对话为激活
     conversations.value.forEach((c) => {
       c.isActive = c.id === id
     })
-    // 实际项目中这里应该从后端加载消息历史
-    // 现在只是清空消息作为演示
-    messages.value = [
-      {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: '你好！有什么我可以帮助你的吗？',
-        timestamp: new Date()
-      }
-    ]
+
+    // 加载新对话的历史消息
+    const targetConv = conversations.value.find((c) => c.id === id)
+    if (targetConv?.messages && targetConv.messages.length > 0) {
+      // 从conversation中恢复历史消息
+      messages.value = [...targetConv.messages]
+    } else {
+      // TODO: 实际项目中这里应该调用后端API加载消息历史
+      // await loadMessagesFromBackend(id)
+
+      // 暂时显示欢迎消息
+      messages.value = [
+        {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: '你好！有什么我可以帮助你的吗？',
+          timestamp: new Date()
+        }
+      ]
+    }
   }
 
   /**
@@ -188,6 +236,29 @@ export const useChatStore = defineStore('chat', () => {
     if (conversation) {
       conversation.customTitle = newTitle
       conversation.title = newTitle
+    }
+  }
+
+  /**
+   * 删除对话
+   * @param conversationId - 对话ID
+   */
+  function deleteConversation(conversationId: string) {
+    const index = conversations.value.findIndex((c) => c.id === conversationId)
+    if (index === -1) return
+
+    const wasActive = conversations.value[index].isActive
+
+    // 删除对话
+    conversations.value.splice(index, 1)
+
+    // 如果删除的是当前活跃对话，切换到第一个对话
+    if (wasActive && conversations.value.length > 0) {
+      switchConversation(conversations.value[0].id)
+    } else if (conversations.value.length === 0) {
+      // 如果没有对话了，清空消息
+      messages.value = []
+      currentConversationId.value = null
     }
   }
 
@@ -270,6 +341,7 @@ export const useChatStore = defineStore('chat', () => {
     sendMessage,
     switchConversation,
     createConversation,
-    updateConversationTitle
+    updateConversationTitle,
+    deleteConversation
   }
 })

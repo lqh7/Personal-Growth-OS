@@ -36,17 +36,19 @@
 
     <!-- Main Content Grid -->
     <div class="content-grid">
-      <!-- Week Calendar Placeholder -->
+      <!-- Week Calendar -->
       <div class="calendar-section card">
         <div class="section-header">
           <h3 class="section-title">本周日历</h3>
-          <el-button text type="primary">查看更多</el-button>
+          <el-button text type="primary" @click="router.push('/tasks')">查看更多</el-button>
         </div>
-        <div class="calendar-placeholder">
-          <el-icon class="placeholder-icon"><Calendar /></el-icon>
-          <p class="placeholder-text">日历视图将在 P1 实现</p>
-          <p class="placeholder-hint">将展示每日任务分布和时间块视图</p>
-        </div>
+        <WeekCalendar
+          :tasks="calendarTasks"
+          @task-click="handleTaskClick"
+          @task-complete="handleTaskComplete"
+          @task-snooze="handleTaskSnooze"
+          @slot-click="handleSlotClick"
+        />
       </div>
 
       <!-- Floating Tasks -->
@@ -120,11 +122,11 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Plus,
-  Calendar,
   Clock,
   InfoFilled,
   SuccessFilled
 } from '@element-plus/icons-vue'
+import WeekCalendar from '@/components/calendar/WeekCalendar.vue'
 
 // ============================================
 // Types
@@ -255,6 +257,140 @@ const recentActivities = ref<Activity[]>([
   }
 ])
 
+// Mock calendar tasks with specific times
+const calendarTasks = ref([
+  {
+    id: 'cal-1',
+    title: '团队站会',
+    description: '每日团队同步',
+    status: 'completed' as const,
+    priority: 3,
+    dueDate: getDateForDayOfWeek(1), // Monday
+    dueTime: '09:00',
+    duration: 30,
+    completed: true,
+    project: {
+      id: '1',
+      name: '工作项目',
+      color: '#667eea'
+    }
+  },
+  {
+    id: 'cal-2',
+    title: '前端代码review',
+    status: 'in_progress' as const,
+    priority: 4,
+    dueDate: getDateForDayOfWeek(1),
+    dueTime: '14:00',
+    duration: 60,
+    completed: false,
+    project: {
+      id: '1',
+      name: '工作项目',
+      color: '#667eea'
+    }
+  },
+  {
+    id: 'cal-3',
+    title: '学习LangGraph文档',
+    status: 'pending' as const,
+    priority: 2,
+    dueDate: getDateForDayOfWeek(2), // Tuesday
+    dueTime: '10:00',
+    duration: 90,
+    completed: false,
+    project: {
+      id: '2',
+      name: '个人学习',
+      color: '#f093fb'
+    }
+  },
+  {
+    id: 'cal-4',
+    title: '准备项目演示PPT',
+    status: 'pending' as const,
+    priority: 5,
+    dueDate: getDateForDayOfWeek(3), // Wednesday
+    dueTime: '15:00',
+    duration: 120,
+    completed: false,
+    project: {
+      id: '1',
+      name: '工作项目',
+      color: '#667eea'
+    }
+  },
+  {
+    id: 'cal-5',
+    title: '健身房锻炼',
+    status: 'pending' as const,
+    priority: 3,
+    dueDate: getDateForDayOfWeek(4), // Thursday
+    dueTime: '18:00',
+    duration: 60,
+    completed: false,
+    project: {
+      id: '3',
+      name: '健康管理',
+      color: '#4facfe'
+    }
+  },
+  {
+    id: 'cal-6',
+    title: '周报总结',
+    status: 'pending' as const,
+    priority: 4,
+    dueDate: getDateForDayOfWeek(5), // Friday
+    dueTime: '16:00',
+    duration: 30,
+    completed: false,
+    project: {
+      id: '1',
+      name: '工作项目',
+      color: '#667eea'
+    }
+  },
+  // Floating tasks (no time)
+  {
+    id: 'cal-7',
+    title: '阅读产品需求文档',
+    status: 'pending' as const,
+    priority: 3,
+    dueDate: new Date(),
+    completed: false,
+    project: {
+      id: '1',
+      name: '工作项目',
+      color: '#667eea'
+    }
+  },
+  {
+    id: 'cal-8',
+    title: '整理笔记',
+    status: 'pending' as const,
+    priority: 2,
+    completed: false,
+    project: {
+      id: '2',
+      name: '个人学习',
+      color: '#f093fb'
+    }
+  }
+])
+
+// Helper function to get date for specific day of current week
+function getDateForDayOfWeek(dayIndex: number): Date {
+  const today = new Date()
+  const currentDay = today.getDay()
+  const monday = new Date(today)
+  const diff = currentDay === 0 ? -6 : 1 - currentDay
+  monday.setDate(today.getDate() + diff)
+
+  const targetDate = new Date(monday)
+  targetDate.setDate(monday.getDate() + dayIndex)
+  return targetDate
+}
+
 // ============================================
 // Computed
 // ============================================
@@ -341,6 +477,14 @@ function getActivityIcon(type: Activity['type']): string {
     review_generated: '📊'
   }
   return icons[type] || '•'
+}
+
+function handleTaskSnooze(taskId: string) {
+  ElMessage.info(`延后任务: ${taskId}`)
+}
+
+function handleSlotClick(date: Date, hour: number) {
+  ElMessage.info(`点击了时间槽: ${date.toLocaleDateString()} ${hour}:00`)
 }
 </script>
 
@@ -511,39 +655,10 @@ function getActivityIcon(type: Activity['type']): string {
 }
 
 // ============================================
-// Calendar Placeholder
+// Calendar Section
 // ============================================
 .calendar-section {
   grid-column: 1 / -1;
-}
-
-.calendar-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-  background-color: $bg-color-hover;
-  border-radius: $radius-md;
-  border: 2px dashed $color-border;
-
-  .placeholder-icon {
-    font-size: 64px;
-    color: $color-text-tertiary;
-    margin-bottom: $spacing-md;
-  }
-
-  .placeholder-text {
-    font-size: $font-size-md;
-    color: $color-text-secondary;
-    margin: 0;
-  }
-
-  .placeholder-hint {
-    font-size: $font-size-sm;
-    color: $color-text-tertiary;
-    margin-top: $spacing-xs;
-  }
 }
 
 // ============================================

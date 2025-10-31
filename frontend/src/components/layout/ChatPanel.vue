@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-panel" :style="{ width: `${width}px` }">
+  <div class="chat-panel">
     <!-- 头部 -->
     <div class="chat-header">
       <div class="header-title">
@@ -76,17 +76,6 @@ import { ElMessage } from 'element-plus'
 import { Loading, ChatLineRound } from '@element-plus/icons-vue'
 
 // ============================================
-// Props
-// ============================================
-interface Props {
-  width?: number
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  width: 450
-})
-
-// ============================================
 // Stores & Router
 // ============================================
 const chatStore = useChatStore()
@@ -105,8 +94,10 @@ async function handleSend() {
   const message = inputMessage.value.trim()
   if (!message) return
 
-  await chatStore.sendMessage(message)
+  // 立即清空输入框，提升体验
   inputMessage.value = ''
+
+  await chatStore.sendMessage(message)
 
   // 滚动到底部
   nextTick(() => {
@@ -175,6 +166,7 @@ watch(
 
 .chat-panel {
   height: 100vh;
+  width: 100%; // 自适应父容器宽度
   background-color: $bg-color-card;
   border-left: 1px solid $color-border;
   display: flex;
