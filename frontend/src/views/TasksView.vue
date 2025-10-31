@@ -70,6 +70,10 @@
             <el-icon><List /></el-icon>
             列表
           </el-button>
+          <el-button :type="viewMode === 'tree' ? 'primary' : ''" @click="viewMode = 'tree'">
+            <el-icon><Fold /></el-icon>
+            项目树
+          </el-button>
         </el-button-group>
       </div>
     </div>
@@ -139,7 +143,7 @@
     </div>
 
     <!-- List View -->
-    <div v-else class="list-view">
+    <div v-else-if="viewMode === 'list'" class="list-view">
       <el-table :data="filteredTasks" style="width: 100%">
         <el-table-column type="selection" width="55" />
         <el-table-column prop="title" label="任务标题" min-width="200">
@@ -187,6 +191,142 @@
       </el-table>
     </div>
 
+    <!-- Tree View -->
+    <div v-else-if="viewMode === 'tree'" class="tree-view">
+      <div
+        v-for="project in projectTreeData"
+        :key="project.id"
+        class="project-tree-node"
+      >
+        <div class="project-header" @click="toggleProjectExpand(project.id)">
+          <el-icon class="expand-icon" :class="{ 'is-expanded': project.expanded }">
+            <ArrowRight />
+          </el-icon>
+          <span class="project-color-indicator" :style="{ backgroundColor: project.color }"></span>
+          <span class="project-name">{{ project.name }}</span>
+          <span class="project-task-count">{{ project.tasks.length }} 个任务</span>
+          <div class="project-stats">
+            <span class="stat pending">{{ project.stats.pending }} 待办</span>
+            <span class="stat in-progress">{{ project.stats.inProgress }} 进行中</span>
+            <span class="stat completed">{{ project.stats.completed }} 已完成</span>
+          </div>
+          <el-button
+            size="small"
+            text
+            @click.stop="handleQuickAddToProject(project.id)"
+          >
+            <el-icon><Plus /></el-icon>
+            添加任务
+          </el-button>
+        </div>
+
+        <transition name="slide-down">
+          <div v-show="project.expanded" class="project-tasks">
+            <div
+              v-for="task in project.tasks"
+              :key="task.id"
+              class="tree-task-item"
+            >
+              <el-checkbox
+                v-model="task.completed"
+                @change="handleTaskComplete(task.id)"
+                @click.stop
+              />
+              <div class="task-content" @click="handleTaskClick(task.id)">
+                <span class="task-title" :class="{ 'task-completed': task.completed }">
+                  {{ task.title }}
+                </span>
+                <div class="task-meta">
+                  <el-tag
+                    v-if="task.status !== 'pending'"
+                    size="small"
+                    :type="task.status === 'completed' ? 'success' : task.status === 'in_progress' ? 'warning' : 'info'"
+                  >
+                    {{ getStatusLabel(task.status) }}
+                  </el-tag>
+                  <el-rate v-model="task.priority" disabled :max="5" size="small" />
+                  <span v-if="task.dueDate" class="due-date" :class="getDueDateClass(task.dueDate)">
+                    {{ formatDueDate(task.dueDate) }}
+                  </span>
+                </div>
+              </div>
+              <div class="task-actions">
+                <el-button size="small" text @click.stop="handleTaskSnooze(task.id)">
+                  <el-icon><Clock /></el-icon>
+                </el-button>
+                <el-button size="small" text @click.stop="handleTaskClick(task.id)">
+                  <el-icon><Edit /></el-icon>
+                </el-button>
+                <el-button size="small" text type="danger" @click.stop="handleTaskDelete(task.id)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+            <div v-if="project.tasks.length === 0" class="empty-project">
+              <el-icon><DocumentAdd /></el-icon>
+              <p>该项目暂无任务</p>
+            </div>
+          </div>
+        </transition>
+      </div>
+
+      <!-- Tasks without project -->
+      <div v-if="tasksWithoutProject.length > 0" class="project-tree-node">
+        <div class="project-header" @click="toggleProjectExpand('no-project')">
+          <el-icon class="expand-icon" :class="{ 'is-expanded': noProjectExpanded }">
+            <ArrowRight />
+          </el-icon>
+          <span class="project-name">未分配项目</span>
+          <span class="project-task-count">{{ tasksWithoutProject.length }} 个任务</span>
+        </div>
+
+        <transition name="slide-down">
+          <div v-show="noProjectExpanded" class="project-tasks">
+            <div
+              v-for="task in tasksWithoutProject"
+              :key="task.id"
+              class="tree-task-item"
+            >
+              <el-checkbox
+                v-model="task.completed"
+                @change="handleTaskComplete(task.id)"
+                @click.stop
+              />
+              <div class="task-content" @click="handleTaskClick(task.id)">
+                <span class="task-title" :class="{ 'task-completed': task.completed }">
+                  {{ task.title }}
+                </span>
+                <div class="task-meta">
+                  <el-tag
+                    v-if="task.status !== 'pending'"
+                    size="small"
+                    :type="task.status === 'completed' ? 'success' : task.status === 'in_progress' ? 'warning' : 'info'"
+                  >
+                    {{ getStatusLabel(task.status) }}
+                  </el-tag>
+                  <el-rate v-model="task.priority" disabled :max="5" size="small" />
+                  <span v-if="task.dueDate" class="due-date" :class="getDueDateClass(task.dueDate)">
+                    {{ formatDueDate(task.dueDate) }}
+                  </span>
+                </div>
+              </div>
+              <div class="task-actions">
+                <el-button size="small" text @click.stop="handleTaskSnooze(task.id)">
+                  <el-icon><Clock /></el-icon>
+                </el-button>
+                <el-button size="small" text @click.stop="handleTaskClick(task.id)">
+                  <el-icon><Edit /></el-icon>
+                </el-button>
+                <el-button size="small" text type="danger" @click.stop="handleTaskDelete(task.id)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </transition>
+      </div>
+    </div>
+
     <!-- Task Ignition Dialog -->
     <el-dialog
       v-model="showIgniteDialog"
@@ -196,7 +336,7 @@
     >
       <div class="ignite-dialog-content">
         <p class="dialog-hint">
-          <el-icon><Bulb /></el-icon>
+          <el-icon><InfoFilled /></el-icon>
           描述你的任务，AI 将帮你分解为可执行的子任务
         </p>
         <el-input
@@ -304,23 +444,27 @@
     </el-dialog>
 
     <!-- Snooze Dialog -->
-    <el-dialog v-model="showSnoozeDialog" title="延后任务" width="400px">
+    <el-dialog v-model="showSnoozeDialog" title="延后任务" width="460px">
       <div class="snooze-options">
-        <el-button
-          v-for="option in snoozeOptions"
-          :key="option.value"
-          class="snooze-option-btn"
-          @click="confirmSnooze(option.value)"
-        >
-          <div class="snooze-label">{{ option.label }}</div>
-          <div class="snooze-hint">{{ option.hint }}</div>
-        </el-button>
+        <div class="snooze-options-grid">
+          <div
+            v-for="option in snoozeOptions"
+            :key="option.value"
+            class="snooze-option-btn"
+            @click="confirmSnooze(option.value)"
+          >
+            <div class="snooze-label">{{ option.label }}</div>
+            <div class="snooze-hint">{{ option.hint }}</div>
+          </div>
+        </div>
+
+        <el-divider>或选择自定义时间</el-divider>
 
         <el-date-picker
           v-model="customSnoozeDate"
           type="datetime"
           placeholder="选择自定义时间"
-          style="width: 100%; margin-top: 12px"
+          style="width: 100%"
         />
       </div>
       <template #footer>
@@ -331,6 +475,65 @@
           :disabled="!customSnoozeDate"
         >
           确认延后
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Task Edit/Create Dialog -->
+    <el-dialog
+      v-model="showTaskDialog"
+      :title="editingTask ? '编辑任务' : '创建任务'"
+      width="600px"
+      :close-on-click-modal="false"
+    >
+      <el-form :model="taskForm" label-width="80px">
+        <el-form-item label="任务标题" required>
+          <el-input v-model="taskForm.title" placeholder="请输入任务标题" />
+        </el-form-item>
+
+        <el-form-item label="任务描述">
+          <el-input
+            v-model="taskForm.description"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入任务描述（可选）"
+          />
+        </el-form-item>
+
+        <el-form-item label="所属项目">
+          <el-select v-model="taskForm.projectId" placeholder="选择项目（可选）" clearable style="width: 100%">
+            <el-option
+              v-for="project in projects"
+              :key="project.id"
+              :label="project.name"
+              :value="project.id"
+            >
+              <span class="project-option">
+                <span class="project-color" :style="{ backgroundColor: project.color }"></span>
+                {{ project.name }}
+              </span>
+            </el-option>
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="优先级">
+          <el-rate v-model="taskForm.priority" :max="5" show-text />
+        </el-form-item>
+
+        <el-form-item label="截止时间">
+          <el-date-picker
+            v-model="taskForm.dueDate"
+            type="datetime"
+            placeholder="选择截止时间（可选）"
+            style="width: 100%"
+          />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="closeTaskDialog">取消</el-button>
+        <el-button type="primary" @click="handleSaveTask">
+          {{ editingTask ? '保存' : '创建' }}
         </el-button>
       </template>
     </el-dialog>
@@ -347,31 +550,32 @@ import {
   Search,
   Grid,
   List,
+  Fold,
+  ArrowRight,
+  Edit,
+  Delete,
+  DocumentAdd,
   MoreFilled,
-  Bulb,
+  InfoFilled,
   Clock,
   Timer
 } from '@element-plus/icons-vue'
 import TaskCard from '@/components/tasks/TaskCard.vue'
+import { useTaskStore } from '@/stores/taskStore'
+import { useProjectStore } from '@/stores/projectStore'
+import { useTaskAdapter, type ViewTask } from '@/composables/useTaskAdapter'
+
+// ============================================
+// Stores
+// ============================================
+const taskStore = useTaskStore()
+const projectStore = useProjectStore()
+const { toViewTask, toApiTask } = useTaskAdapter()
 
 // ============================================
 // Types
 // ============================================
-interface Task {
-  id: string
-  title: string
-  description?: string
-  status: 'pending' | 'in_progress' | 'completed'
-  priority: number
-  dueDate?: Date
-  snoozeUntil?: Date
-  completed: boolean
-  project?: {
-    id: string
-    name: string
-    color: string
-  }
-}
+type Task = ViewTask
 
 interface KanbanColumn {
   status: string
@@ -409,7 +613,7 @@ const router = useRouter()
 // ============================================
 // State
 // ============================================
-const viewMode = ref<'kanban' | 'list'>('kanban')
+const viewMode = ref<'kanban' | 'list' | 'tree'>('kanban')
 const selectedProject = ref('')
 const selectedPriority = ref('')
 const searchQuery = ref('')
@@ -417,16 +621,28 @@ const searchQuery = ref('')
 const showIgniteDialog = ref(false)
 const showIgnitionResult = ref(false)
 const showSnoozeDialog = ref(false)
+const showTaskDialog = ref(false)
 
 const igniting = ref(false)
 const currentSnoozeTaskId = ref<string | null>(null)
+const noProjectExpanded = ref(true)
 const customSnoozeDate = ref<Date | null>(null)
+const editingTask = ref<Task | null>(null)
 
 const igniteForm = ref({
   description: ''
 })
 
 const ignitionResult = ref<IgnitionResult | null>(null)
+
+const taskForm = ref({
+  title: '',
+  description: '',
+  priority: 3,
+  projectId: '',
+  dueDate: null as Date | null,
+  dueTime: ''
+})
 
 // Mock data
 const projects = ref([
@@ -435,54 +651,10 @@ const projects = ref([
   { id: '3', name: '健康管理', color: '#4facfe' }
 ])
 
-const allTasks = ref<Task[]>([
-  {
-    id: '1',
-    title: '完成前端详细设计文档',
-    description: '包括组件设计、路由设计、状态管理等',
-    status: 'in_progress',
-    priority: 5,
-    dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
-    completed: false,
-    project: projects.value[0]
-  },
-  {
-    id: '2',
-    title: '学习 LangGraph 基础',
-    description: '了解节点、边、状态的概念',
-    status: 'pending',
-    priority: 4,
-    dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
-    completed: false,
-    project: projects.value[1]
-  },
-  {
-    id: '3',
-    title: '每日晨跑 5km',
-    status: 'completed',
-    priority: 3,
-    completed: true,
-    project: projects.value[2]
-  },
-  {
-    id: '4',
-    title: '优化数据库查询性能',
-    description: '添加索引，优化慢查询',
-    status: 'pending',
-    priority: 5,
-    dueDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000),
-    completed: false,
-    project: projects.value[0]
-  },
-  {
-    id: '5',
-    title: '阅读《深度工作》第3章',
-    status: 'in_progress',
-    priority: 2,
-    completed: false,
-    project: projects.value[1]
-  }
-])
+// Computed: Convert API tasks to View tasks
+const allTasks = computed(() => {
+  return taskStore.tasks.map(task => toViewTask(task))
+})
 
 const snoozeOptions = [
   { label: '1小时后', value: '1h', hint: formatSnoozeHint(1, 'hours') },
@@ -554,16 +726,40 @@ const kanbanColumns = computed<KanbanColumn[]>(() => [
   }
 ])
 
+// Project tree data with expanded state
+const projectTreeData = computed(() => {
+  return projects.value.map(project => {
+    const projectTasks = filteredTasks.value.filter(t => t.project?.id === project.id)
+    return {
+      ...project,
+      tasks: projectTasks,
+      expanded: project.expanded ?? true,
+      stats: {
+        pending: projectTasks.filter(t => t.status === 'pending').length,
+        inProgress: projectTasks.filter(t => t.status === 'in_progress').length,
+        completed: projectTasks.filter(t => t.status === 'completed').length
+      }
+    }
+  })
+})
+
+// Tasks without project assignment
+const tasksWithoutProject = computed(() => {
+  return filteredTasks.value.filter(t => !t.project)
+})
+
 // ============================================
 // Methods
 // ============================================
-function loadTasks() {
-  // Mock: In real app, this would call API
-  console.log('Loading tasks with filters:', {
-    project: selectedProject.value,
-    priority: selectedPriority.value,
-    search: searchQuery.value
-  })
+async function loadTasks() {
+  try {
+    await Promise.all([
+      taskStore.fetchTasks(),
+      projectStore.fetchProjects()
+    ])
+  } catch (error) {
+    ElMessage.error('加载任务失败')
+  }
 }
 
 function handleSearch() {
@@ -572,65 +768,65 @@ function handleSearch() {
 }
 
 function handleQuickCreate() {
-  ElMessage.info('快速创建对话框（简化版）')
+  editingTask.value = null
+  taskForm.value = {
+    title: '',
+    description: '',
+    priority: 3,
+    projectId: '',
+    dueDate: null,
+    dueTime: ''
+  }
+  showTaskDialog.value = true
 }
 
 function handleQuickAddToColumn(status: string) {
-  ElMessage.info(`添加任务到: ${status}`)
+  handleQuickCreate()
 }
 
 async function handleIgnite() {
-  igniting.value = true
-
-  // Mock AI response with delay
-  await new Promise((resolve) => setTimeout(resolve, 1500))
-
-  ignitionResult.value = {
-    mainTask: {
-      title: '准备下周的项目演示',
-      description: '包含PPT制作、演示稿撰写、Demo准备等子任务',
-      suggestedDueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    },
-    subtasks: [
-      {
-        title: '回顾上次演示的PPT',
-        description: '检查现有内容，确定可复用部分',
-        estimatedTime: 30,
-        order: 1
-      },
-      {
-        title: '准备演示Demo',
-        description: '确保所有功能正常运行',
-        estimatedTime: 90,
-        order: 2
-      },
-      {
-        title: '撰写演示稿',
-        description: '准备讲解要点和演示脚本',
-        estimatedTime: 60,
-        order: 3
-      }
-    ],
-    relatedNotes: [
-      {
-        id: 'note1',
-        title: '上次项目演示总结',
-        excerpt: '上次演示中客户关注的重点是性能优化和用户体验...',
-        relevanceScore: 0.92
-      },
-      {
-        id: 'note2',
-        title: '项目技术亮点整理',
-        excerpt: 'AI驱动的任务分解、智能知识检索、可视化复盘...',
-        relevanceScore: 0.85
-      }
-    ]
+  if (!igniteForm.value.description.trim()) {
+    ElMessage.warning('请输入任务描述')
+    return
   }
 
-  igniting.value = false
-  showIgniteDialog.value = false
-  showIgnitionResult.value = true
-  ElMessage.success('任务分解完成！')
+  igniting.value = true
+
+  try {
+    const response = await taskStore.igniteTask({
+      task_description: igniteForm.value.description,
+      project_id: igniteForm.value.projectId ? Number(igniteForm.value.projectId) : undefined
+    })
+
+    // Convert API response to view format
+    ignitionResult.value = {
+      mainTask: {
+        title: response.main_task.title,
+        description: response.main_task.description || '',
+        suggestedDueDate: response.main_task.due_date ? new Date(response.main_task.due_date) : undefined
+      },
+      subtasks: response.subtasks.map(task => ({
+        title: task.title,
+        description: task.description || '',
+        estimatedTime: 60, // Default 60 minutes
+        order: 1
+      })),
+      relatedNotes: response.related_notes.map(note => ({
+        id: String(note.note_id),
+        title: note.title,
+        excerpt: '',
+        relevanceScore: note.similarity_score
+      }))
+    }
+
+    igniting.value = false
+    showIgniteDialog.value = false
+    showIgnitionResult.value = true
+    ElMessage.success('任务分解完成！')
+  } catch (error) {
+    igniting.value = false
+    ElMessage.error('任务分解失败')
+  }
 }
 
 function handleConfirmIgnition() {
@@ -642,15 +838,31 @@ function handleConfirmIgnition() {
 }
 
 function handleTaskClick(taskId: string) {
-  ElMessage.info(`打开任务详情: ${taskId}`)
-}
-
-function handleTaskComplete(taskId: string) {
   const task = allTasks.value.find((t) => t.id === taskId)
   if (task) {
-    task.completed = !task.completed
-    task.status = task.completed ? 'completed' : 'pending'
-    ElMessage.success(task.completed ? '任务已完成！' : '任务已恢复')
+    editingTask.value = task
+    taskForm.value = {
+      title: task.title,
+      description: task.description || '',
+      priority: task.priority,
+      projectId: task.project?.id || '',
+      dueDate: task.dueDate || null,
+      dueTime: task.dueTime || ''
+    }
+    showTaskDialog.value = true
+  }
+}
+
+async function handleTaskComplete(taskId: string) {
+  try {
+    const task = allTasks.value.find((t) => t.id === taskId)
+    if (task) {
+      const newStatus = task.completed ? 'pending' : 'completed'
+      await taskStore.updateTask(Number(taskId), { status: newStatus })
+      ElMessage.success(newStatus === 'completed' ? '任务已完成！' : '任务已恢复')
+    }
+  } catch (error) {
+    ElMessage.error('更新任务状态失败')
   }
 }
 
@@ -660,7 +872,7 @@ function handleTaskSnooze(taskId: string) {
   showSnoozeDialog.value = true
 }
 
-function confirmSnooze(option: string) {
+async function confirmSnooze(option: string) {
   let snoozeUntil: Date
 
   if (option === 'custom') {
@@ -670,27 +882,33 @@ function confirmSnooze(option: string) {
     snoozeUntil = calculateSnoozeTime(option)
   }
 
-  const task = allTasks.value.find((t) => t.id === currentSnoozeTaskId.value)
-  if (task) {
-    task.snoozeUntil = snoozeUntil
-    ElMessage.success(`任务已延后至 ${formatDateTime(snoozeUntil)}`)
+  try {
+    if (currentSnoozeTaskId.value) {
+      await taskStore.snoozeTask(Number(currentSnoozeTaskId.value), snoozeUntil.toISOString())
+      ElMessage.success(`任务已延后至 ${formatDateTime(snoozeUntil)}`)
+    }
+  } catch (error) {
+    ElMessage.error('延后任务失败')
   }
 
   showSnoozeDialog.value = false
 }
 
-function handleTaskDelete(taskId: string) {
-  ElMessageBox.confirm('确定要删除这个任务吗？', '确认删除', {
-    confirmButtonText: '删除',
-    cancelButtonText: '取消',
-    type: 'warning'
-  }).then(() => {
-    const index = allTasks.value.findIndex((t) => t.id === taskId)
-    if (index !== -1) {
-      allTasks.value.splice(index, 1)
-      ElMessage.success('任务已删除')
+async function handleTaskDelete(taskId: string) {
+  try {
+    await ElMessageBox.confirm('确定要删除这个任务吗？', '确认删除', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+
+    await taskStore.deleteTask(Number(taskId))
+    ElMessage.success('任务已删除')
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除任务失败')
     }
-  })
+  }
 }
 
 function handleNoteClick(noteId: string) {
@@ -764,6 +982,84 @@ function getDueDateClass(date: Date): string {
   if (days === 0) return 'today'
   if (days <= 2) return 'soon'
   return ''
+}
+
+function getStatusLabel(status: string): string {
+  const labels = {
+    pending: '待办',
+    in_progress: '进行中',
+    completed: '已完成'
+  }
+  return labels[status as keyof typeof labels] || status
+}
+
+function toggleProjectExpand(projectId: string) {
+  if (projectId === 'no-project') {
+    noProjectExpanded.value = !noProjectExpanded.value
+    return
+  }
+
+  const project = projects.value.find(p => p.id === projectId)
+  if (project) {
+    project.expanded = !project.expanded
+  }
+}
+
+function handleQuickAddToProject(projectId: string) {
+  editingTask.value = null
+  taskForm.value = {
+    title: '',
+    description: '',
+    priority: 3,
+    projectId: projectId,
+    dueDate: null,
+    dueTime: ''
+  }
+  showTaskDialog.value = true
+}
+
+async function handleSaveTask() {
+  if (!taskForm.value.title.trim()) {
+    ElMessage.warning('请输入任务标题')
+    return
+  }
+
+  try {
+    const taskData = {
+      title: taskForm.value.title,
+      description: taskForm.value.description,
+      priority: taskForm.value.priority,
+      dueDate: taskForm.value.dueDate,
+      dueTime: taskForm.value.dueTime,
+      project: taskForm.value.projectId ? {
+        id: taskForm.value.projectId,
+        name: '',
+        color: ''
+      } : undefined
+    }
+
+    const apiData = toApiTask(taskData)
+
+    if (editingTask.value) {
+      // 编辑现有任务
+      await taskStore.updateTask(Number(editingTask.value.id), apiData)
+      ElMessage.success('任务已更新')
+    } else {
+      // 创建新任务
+      await taskStore.createTask(apiData)
+      ElMessage.success('任务已创建')
+    }
+
+    showTaskDialog.value = false
+    closeTaskDialog()
+  } catch (error) {
+    ElMessage.error('保存任务失败')
+  }
+}
+
+function closeTaskDialog() {
+  showTaskDialog.value = false
+  editingTask.value = null
 }
 
 onMounted(() => {
@@ -869,6 +1165,31 @@ onMounted(() => {
   min-height: 500px;
   display: flex;
   flex-direction: column;
+  border-top: 3px solid transparent;
+
+  &.pending {
+    border-top-color: $color-primary;
+
+    .column-header {
+      background-color: rgba($color-primary, 0.05);
+    }
+  }
+
+  &.in_progress {
+    border-top-color: $color-warning;
+
+    .column-header {
+      background-color: rgba($color-warning, 0.05);
+    }
+  }
+
+  &.completed {
+    border-top-color: $color-success;
+
+    .column-header {
+      background-color: rgba($color-success, 0.05);
+    }
+  }
 
   .column-header {
     display: flex;
@@ -876,6 +1197,7 @@ onMounted(() => {
     align-items: center;
     padding: $spacing-lg;
     border-bottom: 1px solid $color-border;
+    transition: background-color $transition-fast;
 
     .column-title {
       display: flex;
@@ -1150,9 +1472,12 @@ onMounted(() => {
 // Snooze Dialog
 // ============================================
 .snooze-options {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-sm;
+  .snooze-options-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: $spacing-sm;
+    margin-bottom: $spacing-md;
+  }
 }
 
 .snooze-option-btn {
@@ -1170,7 +1495,7 @@ onMounted(() => {
 
   &:hover {
     border-color: $color-primary;
-    background-color: lighten($color-primary, 45%);
+    background-color: rgba($color-primary, 0.05);
   }
 
   .snooze-label {
@@ -1182,7 +1507,193 @@ onMounted(() => {
 
   .snooze-hint {
     font-size: $font-size-xs;
-    color: $color-text-tertiary;
+    color: $color-text-secondary;
   }
+}
+
+// ============================================
+// Tree View
+// ============================================
+.tree-view {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+}
+
+.project-tree-node {
+  @include card-base;
+  overflow: hidden;
+
+  .project-header {
+    display: flex;
+    align-items: center;
+    gap: $spacing-md;
+    padding: $spacing-lg;
+    background-color: $bg-color-hover;
+    cursor: pointer;
+    transition: background-color $transition-fast;
+
+    &:hover {
+      background-color: darken($bg-color-hover, 2%);
+    }
+
+    .expand-icon {
+      font-size: $font-size-lg;
+      color: $color-text-secondary;
+      transition: transform $transition-fast;
+
+      &.is-expanded {
+        transform: rotate(90deg);
+      }
+    }
+
+    .project-color-indicator {
+      width: 4px;
+      height: 24px;
+      border-radius: $radius-sm;
+    }
+
+    .project-name {
+      font-size: $font-size-lg;
+      font-weight: 600;
+      color: $color-text-primary;
+      flex: 1;
+    }
+
+    .project-task-count {
+      font-size: $font-size-sm;
+      color: $color-text-secondary;
+      padding: $spacing-xs $spacing-sm;
+      background-color: white;
+      border-radius: $radius-sm;
+    }
+
+    .project-stats {
+      display: flex;
+      gap: $spacing-md;
+
+      .stat {
+        font-size: $font-size-xs;
+        padding: $spacing-xs $spacing-sm;
+        border-radius: $radius-sm;
+
+        &.pending {
+          background-color: rgba($color-primary, 0.1);
+          color: $color-primary;
+        }
+
+        &.in-progress {
+          background-color: rgba($color-warning, 0.1);
+          color: $color-warning;
+        }
+
+        &.completed {
+          background-color: rgba($color-success, 0.1);
+          color: $color-success;
+        }
+      }
+    }
+  }
+
+  .project-tasks {
+    background-color: white;
+  }
+
+  .tree-task-item {
+    display: flex;
+    align-items: center;
+    gap: $spacing-md;
+    padding: $spacing-md $spacing-lg;
+    border-top: 1px solid $color-border;
+    transition: background-color $transition-fast;
+
+    &:hover {
+      background-color: $bg-color-hover;
+    }
+
+    .task-content {
+      flex: 1;
+      cursor: pointer;
+      min-width: 0;
+
+      .task-title {
+        font-size: $font-size-md;
+        color: $color-text-primary;
+        margin-bottom: $spacing-xs;
+        @include text-ellipsis;
+
+        &.task-completed {
+          text-decoration: line-through;
+          color: $color-text-tertiary;
+        }
+      }
+
+      .task-meta {
+        display: flex;
+        align-items: center;
+        gap: $spacing-md;
+        font-size: $font-size-xs;
+        color: $color-text-secondary;
+
+        .due-date {
+          &.overdue {
+            color: $color-danger;
+          }
+
+          &.today {
+            color: $color-warning;
+          }
+
+          &.soon {
+            color: $color-primary;
+          }
+        }
+      }
+    }
+
+    .task-actions {
+      display: flex;
+      gap: $spacing-xs;
+      opacity: 0;
+      transition: opacity $transition-fast;
+    }
+
+    &:hover .task-actions {
+      opacity: 1;
+    }
+  }
+
+  .empty-project {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: $spacing-xl;
+    color: $color-text-tertiary;
+
+    .el-icon {
+      font-size: 48px;
+      margin-bottom: $spacing-md;
+    }
+
+    p {
+      margin: 0;
+      font-size: $font-size-sm;
+    }
+  }
+}
+
+// Slide down transition for tree view
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease;
+  max-height: 1000px;
+  overflow: hidden;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  max-height: 0;
+  opacity: 0;
 }
 </style>

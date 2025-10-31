@@ -56,9 +56,8 @@
           <el-tag
             v-if="task.project"
             size="small"
-            :color="task.project.color"
-            effect="plain"
             class="project-tag"
+            :style="{ borderLeftColor: task.project.color }"
           >
             {{ task.project.name }}
           </el-tag>
@@ -88,8 +87,8 @@
             <el-tag
               v-if="task.project"
               size="small"
-              :color="task.project.color"
-              effect="plain"
+              class="project-tag"
+              :style="{ borderLeftColor: task.project.color }"
             >
               {{ task.project.name }}
             </el-tag>
@@ -238,6 +237,10 @@ function getPriorityColor(priority: number): string {
   @include card-base;
   padding: $spacing-md;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  min-height: 180px;
+  height: 100%;
 
   &:hover {
     @include hover-lift;
@@ -248,6 +251,7 @@ function getPriorityColor(priority: number): string {
     align-items: center;
     gap: $spacing-sm;
     margin-bottom: $spacing-md;
+    flex-shrink: 0;
 
     .card-priority {
       flex: 1;
@@ -267,7 +271,9 @@ function getPriorityColor(priority: number): string {
   }
 
   .card-content {
+    flex: 1;
     margin-bottom: $spacing-md;
+    overflow: hidden;
 
     .card-title {
       font-size: $font-size-md;
@@ -275,6 +281,7 @@ function getPriorityColor(priority: number): string {
       color: $color-text-primary;
       margin: 0 0 $spacing-xs 0;
       line-height: 1.4;
+      @include text-ellipsis-multiline(2);
 
       &.completed {
         text-decoration: line-through;
@@ -295,11 +302,17 @@ function getPriorityColor(priority: number): string {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
+    margin-top: auto;
 
     .footer-left {
       .project-tag {
-        border: none;
+        border: 1px solid $color-border;
+        border-left-width: 3px;
         font-size: $font-size-xs;
+        background-color: $bg-color-card;
+        color: $color-text-primary;
+        font-weight: 500;
       }
     }
 
@@ -375,6 +388,14 @@ function getPriorityColor(priority: number): string {
         align-items: center;
         gap: $spacing-md;
         font-size: $font-size-xs;
+
+        .project-tag {
+          border: 1px solid $color-border;
+          border-left-width: 3px;
+          background-color: $bg-color-card;
+          color: $color-text-primary;
+          font-weight: 500;
+        }
 
         .due-date {
           color: $color-text-secondary;

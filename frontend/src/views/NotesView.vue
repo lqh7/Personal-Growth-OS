@@ -129,18 +129,20 @@
     <el-dialog
       v-model="showCreateDialog"
       :title="editingNote ? '编辑笔记' : '创建笔记'"
-      width="700px"
+      width="900px"
+      top="5vh"
     >
       <el-form :model="noteForm" label-width="80px">
         <el-form-item label="标题">
           <el-input v-model="noteForm.title" placeholder="笔记标题" />
         </el-form-item>
         <el-form-item label="内容">
-          <el-input
+          <MdEditor
             v-model="noteForm.content"
-            type="textarea"
-            :rows="10"
-            placeholder="支持 Markdown 格式"
+            :language="'zh-CN'"
+            :preview="true"
+            :toolbars="editorToolbars"
+            :style="{ height: '500px' }"
           />
         </el-form-item>
         <el-form-item label="来源">
@@ -173,7 +175,7 @@
     </el-dialog>
 
     <!-- View Dialog -->
-    <el-dialog v-model="showViewDialog" title="笔记详情" width="800px">
+    <el-dialog v-model="showViewDialog" title="笔记详情" width="900px" top="5vh">
       <div v-if="viewingNote">
         <h2>{{ viewingNote.title }}</h2>
         <div class="note-meta">
@@ -191,9 +193,10 @@
           </span>
         </div>
         <el-divider />
-        <div class="note-content">
-          {{ viewingNote.content }}
-        </div>
+        <MdPreview
+          :model-value="viewingNote.content"
+          :language="'zh-CN'"
+        />
       </div>
       <template #footer>
         <el-button @click="handleEdit">编辑</el-button>
@@ -210,6 +213,8 @@ import { Plus, Search, Link, Grid, List } from '@element-plus/icons-vue'
 import { useNoteStore } from '@/stores/noteStore'
 import NoteCard from '@/components/notes/NoteCard.vue'
 import type { Note, RelatedNote } from '@/types'
+import { MdEditor, MdPreview } from 'md-editor-v3'
+import 'md-editor-v3/lib/style.css'
 
 const noteStore = useNoteStore()
 
@@ -232,6 +237,36 @@ const noteForm = ref({
   source_url: '',
   tag_names: [] as string[]
 })
+
+// Markdown editor toolbar configuration
+const editorToolbars = [
+  'bold',
+  'underline',
+  'italic',
+  'strikeThrough',
+  '-',
+  'title',
+  'sub',
+  'sup',
+  'quote',
+  'unorderedList',
+  'orderedList',
+  'task',
+  '-',
+  'codeRow',
+  'code',
+  'link',
+  'image',
+  'table',
+  '-',
+  'revoke',
+  'next',
+  '=',
+  'pageFullscreen',
+  'fullscreen',
+  'preview',
+  'catalog'
+]
 
 // ============================================
 // Computed

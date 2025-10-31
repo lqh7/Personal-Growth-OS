@@ -54,6 +54,8 @@
             :key="`${day.date.toISOString()}-${hour}`"
             class="time-slot"
             @click="handleSlotClick(day.date, hour)"
+            @dragover.prevent="handleDragOver"
+            @drop="handleDrop(day.date, hour, $event)"
           >
             <!-- Tasks in this time slot -->
             <div
@@ -157,6 +159,7 @@ const emit = defineEmits<{
   (e: 'task-complete', task: Task): void
   (e: 'task-snooze', taskId: string): void
   (e: 'slot-click', date: Date, hour: number): void
+  (e: 'task-drop', taskId: string, date: Date, hour: number): void
 }>()
 
 // ============================================
@@ -292,6 +295,21 @@ function handleDragStart(task: Task, event: DragEvent) {
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('taskId', task.id)
+  }
+}
+
+function handleDragOver(event: DragEvent) {
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
+}
+
+function handleDrop(date: Date, hour: number, event: DragEvent) {
+  event.preventDefault()
+  const taskId = event.dataTransfer?.getData('taskId')
+  if (taskId) {
+    emit('task-drop', taskId, date, hour)
   }
 }
 </script>

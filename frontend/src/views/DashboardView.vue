@@ -48,6 +48,7 @@
           @task-complete="handleTaskComplete"
           @task-snooze="handleTaskSnooze"
           @slot-click="handleSlotClick"
+          @task-drop="handleTaskDrop"
         />
       </div>
 
@@ -67,6 +68,8 @@
             v-for="task in floatingTasks"
             :key="task.id"
             class="floating-task-item"
+            draggable="true"
+            @dragstart="handleDragStart(task, $event)"
             @click="handleTaskClick(task.id)"
           >
             <div class="task-checkbox">
@@ -117,7 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -127,6 +130,9 @@ import {
   SuccessFilled
 } from '@element-plus/icons-vue'
 import WeekCalendar from '@/components/calendar/WeekCalendar.vue'
+import { useTaskStore } from '@/stores/taskStore'
+import { useProjectStore } from '@/stores/projectStore'
+import { useTaskAdapter, type ViewTask } from '@/composables/useTaskAdapter'
 
 // ============================================
 // Types
@@ -159,76 +165,111 @@ interface Activity {
 }
 
 // ============================================
-// Router
+// Stores
 // ============================================
 const router = useRouter()
+const taskStore = useTaskStore()
+const projectStore = useProjectStore()
+const { toViewTask, toApiTask } = useTaskAdapter()
 
 // ============================================
-// State - Mock Data
+// Lifecycle
 // ============================================
-const stats = ref<Stat[]>([
-  {
-    key: 'pending',
-    icon: '📋',
-    label: '待办任务',
-    value: 12,
-    trend: 'up',
-    trendText: '比昨天 +3'
-  },
-  {
-    key: 'overdue',
-    icon: '⚠️',
-    label: '逾期任务',
-    value: 3,
-    trend: 'down',
-    trendText: '比昨天 -1'
-  },
-  {
-    key: 'completed',
-    icon: '✅',
-    label: '本周完成',
-    value: 27,
-    trend: 'up',
-    trendText: '完成率 82%'
-  },
-  {
-    key: 'week_total',
-    icon: '📊',
-    label: '本周总计',
-    value: 42,
-    trend: 'neutral',
-    trendText: '进行中 12'
-  }
-])
+onMounted(async () => {
+  await loadTasks()
+})
 
-const floatingTasks = ref<FloatingTask[]>([
-  {
-    id: '1',
-    title: '准备季度总结PPT',
-    completed: false,
-    snoozeUntil: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2小时后
-    project: {
-      name: '工作项目',
-      color: '#667eea'
-    }
-  },
-  {
-    id: '2',
-    title: '阅读《深度工作》第3章',
-    completed: false,
-    snoozeUntil: new Date(Date.now() + 5 * 60 * 60 * 1000), // 5小时后
-    project: {
-      name: '个人学习',
-      color: '#f093fb'
-    }
-  },
-  {
-    id: '3',
-    title: '回复客户邮件',
-    completed: false,
-    snoozeUntil: new Date(Date.now() + 24 * 60 * 60 * 1000) // 明天
+async function loadTasks() {
+  try {
+    await Promise.all([
+      taskStore.fetchTasks(),
+      projectStore.fetchProjects()
+    ])
+  } catch (error) {
+    ElMessage.error('加载任务失败')
   }
-])
+}
+
+// ============================================
+// State - Mock Data (Activities only - stats are computed)
+// ============================================
+
+// Computed stats from task store
+const stats = computed<Stat[]>(() => {
+  const now = new Date()
+  const weekStart = new Date(now)
+  weekStart.setDate(now.getDate() - now.getDay() + 1) // Monday
+  weekStart.setHours(0, 0, 0, 0)
+
+  const pendingCount = taskStore.tasks.filter(t => t.status === 'pending').length
+  const overdueCount = taskStore.tasks.filter(t => {
+    if (t.status === 'completed' || !t.due_date) return false
+    return new Date(t.due_date) < now
+  }).length
+  const weekCompletedCount = taskStore.tasks.filter(t => {
+    if (t.status !== 'completed' || !t.completed_at) return false
+    return new Date(t.completed_at) >= weekStart
+  }).length
+  const weekTotalCount = taskStore.tasks.filter(t => {
+    if (!t.created_at) return false
+    return new Date(t.created_at) >= weekStart
+  }).length
+  const inProgressCount = taskStore.tasks.filter(t => t.status === 'in_progress').length
+
+  const completionRate = weekTotalCount > 0 ? Math.round((weekCompletedCount / weekTotalCount) * 100) : 0
+
+  return [
+    {
+      key: 'pending',
+      icon: '📋',
+      label: '待办任务',
+      value: pendingCount,
+      trend: 'neutral',
+      trendText: `进行中 ${inProgressCount}`
+    },
+    {
+      key: 'overdue',
+      icon: '⚠️',
+      label: '逾期任务',
+      value: overdueCount,
+      trend: overdueCount > 0 ? 'down' : 'neutral',
+      trendText: overdueCount > 0 ? '需要关注' : '无逾期'
+    },
+    {
+      key: 'completed',
+      icon: '✅',
+      label: '本周完成',
+      value: weekCompletedCount,
+      trend: 'up',
+      trendText: `完成率 ${completionRate}%`
+    },
+    {
+      key: 'week_total',
+      icon: '📊',
+      label: '本周总计',
+      value: weekTotalCount,
+      trend: 'neutral',
+      trendText: `进行中 ${inProgressCount}`
+    }
+  ]
+})
+
+// Floating tasks - tasks that are snoozed
+const floatingTasks = computed<FloatingTask[]>(() => {
+  const now = new Date()
+  return taskStore.tasks
+    .filter(task => task.snooze_until && new Date(task.snooze_until) > now && task.status !== 'completed')
+    .map(task => {
+      const viewTask = toViewTask(task)
+      return {
+        id: viewTask.id,
+        title: viewTask.title,
+        completed: viewTask.completed,
+        snoozeUntil: viewTask.snoozeUntil!,
+        project: viewTask.project
+      }
+    })
+})
 
 const recentActivities = ref<Activity[]>([
   {
@@ -257,139 +298,34 @@ const recentActivities = ref<Activity[]>([
   }
 ])
 
-// Mock calendar tasks with specific times
-const calendarTasks = ref([
-  {
-    id: 'cal-1',
-    title: '团队站会',
-    description: '每日团队同步',
-    status: 'completed' as const,
-    priority: 3,
-    dueDate: getDateForDayOfWeek(1), // Monday
-    dueTime: '09:00',
-    duration: 30,
-    completed: true,
-    project: {
-      id: '1',
-      name: '工作项目',
-      color: '#667eea'
-    }
-  },
-  {
-    id: 'cal-2',
-    title: '前端代码review',
-    status: 'in_progress' as const,
-    priority: 4,
-    dueDate: getDateForDayOfWeek(1),
-    dueTime: '14:00',
-    duration: 60,
-    completed: false,
-    project: {
-      id: '1',
-      name: '工作项目',
-      color: '#667eea'
-    }
-  },
-  {
-    id: 'cal-3',
-    title: '学习LangGraph文档',
-    status: 'pending' as const,
-    priority: 2,
-    dueDate: getDateForDayOfWeek(2), // Tuesday
-    dueTime: '10:00',
-    duration: 90,
-    completed: false,
-    project: {
-      id: '2',
-      name: '个人学习',
-      color: '#f093fb'
-    }
-  },
-  {
-    id: 'cal-4',
-    title: '准备项目演示PPT',
-    status: 'pending' as const,
-    priority: 5,
-    dueDate: getDateForDayOfWeek(3), // Wednesday
-    dueTime: '15:00',
-    duration: 120,
-    completed: false,
-    project: {
-      id: '1',
-      name: '工作项目',
-      color: '#667eea'
-    }
-  },
-  {
-    id: 'cal-5',
-    title: '健身房锻炼',
-    status: 'pending' as const,
-    priority: 3,
-    dueDate: getDateForDayOfWeek(4), // Thursday
-    dueTime: '18:00',
-    duration: 60,
-    completed: false,
-    project: {
-      id: '3',
-      name: '健康管理',
-      color: '#4facfe'
-    }
-  },
-  {
-    id: 'cal-6',
-    title: '周报总结',
-    status: 'pending' as const,
-    priority: 4,
-    dueDate: getDateForDayOfWeek(5), // Friday
-    dueTime: '16:00',
-    duration: 30,
-    completed: false,
-    project: {
-      id: '1',
-      name: '工作项目',
-      color: '#667eea'
-    }
-  },
-  // Floating tasks (no time)
-  {
-    id: 'cal-7',
-    title: '阅读产品需求文档',
-    status: 'pending' as const,
-    priority: 3,
-    dueDate: new Date(),
-    completed: false,
-    project: {
-      id: '1',
-      name: '工作项目',
-      color: '#667eea'
-    }
-  },
-  {
-    id: 'cal-8',
-    title: '整理笔记',
-    status: 'pending' as const,
-    priority: 2,
-    completed: false,
-    project: {
-      id: '2',
-      name: '个人学习',
-      color: '#f093fb'
-    }
-  }
-])
-
-// Helper function to get date for specific day of current week
-function getDateForDayOfWeek(dayIndex: number): Date {
-  const today = new Date()
-  const currentDay = today.getDay()
-  const monday = new Date(today)
-  const diff = currentDay === 0 ? -6 : 1 - currentDay
-  monday.setDate(today.getDate() + diff)
-
-  const targetDate = new Date(monday)
-  targetDate.setDate(monday.getDate() + dayIndex)
-  return targetDate
-}
+// Calendar tasks - tasks with due dates (excluding snoozed tasks)
+const calendarTasks = computed(() => {
+  const now = new Date()
+  return taskStore.tasks
+    .filter(task => {
+      // Exclude completed tasks
+      if (task.status === 'completed') return false
+      // Exclude snoozed tasks (they appear in floating tasks)
+      if (task.snooze_until && new Date(task.snooze_until) > now) return false
+      // Include tasks with due dates
+      return task.due_date !== undefined
+    })
+    .map(task => {
+      const viewTask = toViewTask(task)
+      return {
+        id: viewTask.id,
+        title: viewTask.title,
+        description: viewTask.description,
+        status: viewTask.status,
+        priority: viewTask.priority,
+        dueDate: viewTask.dueDate,
+        dueTime: viewTask.dueTime,
+        duration: 60, // Default duration
+        completed: viewTask.completed,
+        project: viewTask.project
+      }
+    })
+})
 
 // ============================================
 // Computed
@@ -432,16 +368,17 @@ function handleTaskClick(taskId: string) {
   ElMessage.info(`点击了任务: ${taskId}`)
 }
 
-function handleTaskComplete(task: FloatingTask) {
-  if (task.completed) {
-    ElMessage.success(`任务"${task.title}"已完成！`)
-    // 模拟延迟移除
-    setTimeout(() => {
-      const index = floatingTasks.value.findIndex((t) => t.id === task.id)
-      if (index !== -1) {
-        floatingTasks.value.splice(index, 1)
-      }
-    }, 500)
+async function handleTaskComplete(task: FloatingTask) {
+  try {
+    const newStatus = task.completed ? 'completed' : 'pending'
+    await taskStore.updateTask(Number(task.id), { status: newStatus })
+    if (task.completed) {
+      ElMessage.success(`任务"${task.title}"已完成！`)
+    } else {
+      ElMessage.success('任务已恢复')
+    }
+  } catch (error) {
+    ElMessage.error('更新任务状态失败')
   }
 }
 
@@ -485,6 +422,31 @@ function handleTaskSnooze(taskId: string) {
 
 function handleSlotClick(date: Date, hour: number) {
   ElMessage.info(`点击了时间槽: ${date.toLocaleDateString()} ${hour}:00`)
+}
+
+function handleDragStart(task: FloatingTask, event: DragEvent) {
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('taskId', task.id)
+  }
+}
+
+async function handleTaskDrop(taskId: string, date: Date, hour: number) {
+  try {
+    // Set the new due date and time
+    const dueDate = new Date(date)
+    dueDate.setHours(hour, 0, 0, 0)
+
+    // Update task: set due date and clear snooze
+    await taskStore.updateTask(Number(taskId), {
+      due_date: dueDate.toISOString(),
+      snooze_until: null
+    })
+
+    ElMessage.success(`任务已安排到 ${date.toLocaleDateString('zh-CN')} ${hour}:00`)
+  } catch (error) {
+    ElMessage.error('更新任务时间失败')
+  }
 }
 </script>
 
@@ -695,12 +657,17 @@ function handleSlotClick(date: Date, hour: number) {
   padding: $spacing-md;
   background-color: $bg-color-hover;
   border-radius: $radius-md;
-  cursor: pointer;
+  cursor: move;
   transition: all $transition-fast;
 
   &:hover {
     background-color: darken($bg-color-hover, 2%);
     transform: translateX(4px);
+  }
+
+  &:active {
+    cursor: grabbing;
+    opacity: 0.7;
   }
 
   .task-checkbox {

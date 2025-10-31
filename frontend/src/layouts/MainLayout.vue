@@ -22,19 +22,75 @@
         <ChatPanel />
       </div>
     </div>
+
+    <!-- Keyboard Shortcuts Help Dialog -->
+    <el-dialog v-model="showShortcutsHelp" title="键盘快捷键" width="600px">
+      <div class="shortcuts-help">
+        <div class="shortcut-section">
+          <h4>导航</h4>
+          <div class="shortcut-item">
+            <kbd>Ctrl/Cmd + 1</kbd>
+            <span>工作台</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>Ctrl/Cmd + 2</kbd>
+            <span>任务管理</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>Ctrl/Cmd + 3</kbd>
+            <span>笔记管理</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>Ctrl/Cmd + 4</kbd>
+            <span>数据复盘</span>
+          </div>
+        </div>
+
+        <div class="shortcut-section">
+          <h4>操作</h4>
+          <div class="shortcut-item">
+            <kbd>Ctrl/Cmd + K</kbd>
+            <span>快速创建任务</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>Ctrl/Cmd + N</kbd>
+            <span>创建笔记</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>Ctrl/Cmd + /</kbd>
+            <span>切换侧边栏</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>?</kbd>
+            <span>显示此帮助</span>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="showShortcutsHelp = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUiStore } from '@/stores/uiStore'
 import Sidebar from '@/components/layout/Sidebar.vue'
 import ChatPanel from '@/components/layout/ChatPanel.vue'
+import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
 
 // ============================================
-// Stores
+// Stores & Router
 // ============================================
 const uiStore = useUiStore()
+const router = useRouter()
+
+// ============================================
+// State
+// ============================================
+const showShortcutsHelp = ref(false)
 
 // ============================================
 // Computed
@@ -42,6 +98,71 @@ const uiStore = useUiStore()
 const mainContentWidthPercent = computed(() => {
   return 100 - uiStore.chatPanelWidthPercent
 })
+
+// ============================================
+// Keyboard Shortcuts
+// ============================================
+useKeyboardShortcuts([
+  {
+    key: '1',
+    ctrl: true,
+    description: '跳转到工作台',
+    handler: () => router.push('/')
+  },
+  {
+    key: '2',
+    ctrl: true,
+    description: '跳转到任务管理',
+    handler: () => router.push('/tasks')
+  },
+  {
+    key: '3',
+    ctrl: true,
+    description: '跳转到笔记管理',
+    handler: () => router.push('/notes')
+  },
+  {
+    key: '4',
+    ctrl: true,
+    description: '跳转到数据复盘',
+    handler: () => router.push('/review')
+  },
+  {
+    key: 'k',
+    ctrl: true,
+    description: '快速创建任务',
+    handler: () => {
+      if (router.currentRoute.value.path !== '/tasks') {
+        router.push('/tasks')
+      }
+      // Emit event for task creation (handled in TasksView)
+    }
+  },
+  {
+    key: 'n',
+    ctrl: true,
+    description: '创建笔记',
+    handler: () => {
+      if (router.currentRoute.value.path !== '/notes') {
+        router.push('/notes')
+      }
+      // Emit event for note creation (handled in NotesView)
+    }
+  },
+  {
+    key: '/',
+    ctrl: true,
+    description: '切换侧边栏',
+    handler: () => uiStore.toggleSidebar()
+  },
+  {
+    key: '?',
+    description: '显示快捷键帮助',
+    handler: () => {
+      showShortcutsHelp.value = true
+    }
+  }
+])
 
 // ============================================
 // Methods - 拖拽调整Chat面板宽度
@@ -139,5 +260,54 @@ function startResize(e: MouseEvent) {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+// ============================================
+// Keyboard Shortcuts Help
+// ============================================
+.shortcuts-help {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xl;
+
+  .shortcut-section {
+    h4 {
+      font-size: $font-size-lg;
+      font-weight: 600;
+      color: $color-text-primary;
+      margin: 0 0 $spacing-md 0;
+      border-bottom: 1px solid $color-border;
+      padding-bottom: $spacing-sm;
+    }
+
+    .shortcut-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: $spacing-md 0;
+      border-bottom: 1px solid $color-border;
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      kbd {
+        font-family: 'Monaco', 'Courier New', monospace;
+        font-size: $font-size-xs;
+        font-weight: 600;
+        padding: $spacing-xs $spacing-sm;
+        background-color: $bg-color-hover;
+        border: 1px solid $color-border;
+        border-radius: $radius-sm;
+        box-shadow: 0 2px 0 rgba(0, 0, 0, 0.05);
+        white-space: nowrap;
+      }
+
+      span {
+        font-size: $font-size-sm;
+        color: $color-text-regular;
+      }
+    }
+  }
 }
 </style>
