@@ -10,7 +10,7 @@ class TaskBase(BaseModel):
     """Base schema for Task with common fields."""
     title: str = Field(..., max_length=500)
     description: Optional[str] = None
-    status: str = Field(default="pending", pattern="^(pending|in_progress|completed|cancelled)$")
+    status: str = Field(default="pending", pattern="^(pending|in_progress|completed|overdue)$")
     priority: int = Field(default=3, ge=1, le=5)
     due_date: Optional[datetime] = None
     start_time: Optional[datetime] = Field(None, description="Schedule start time")
@@ -29,7 +29,7 @@ class TaskUpdate(BaseModel):
     """Schema for updating an existing task (all fields optional)."""
     title: Optional[str] = Field(None, max_length=500)
     description: Optional[str] = None
-    status: Optional[str] = Field(None, pattern="^(pending|in_progress|completed|cancelled)$")
+    status: Optional[str] = Field(None, pattern="^(pending|in_progress|completed|overdue)$")
     priority: Optional[int] = Field(None, ge=1, le=5)
     due_date: Optional[datetime] = None
     start_time: Optional[datetime] = None

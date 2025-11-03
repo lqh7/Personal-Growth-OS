@@ -21,8 +21,10 @@
             score-template=""
           />
         </div>
-        <el-dropdown trigger="click" @command="handleCommand" @click.stop>
-          <el-icon class="more-icon"><MoreFilled /></el-icon>
+        <el-dropdown trigger="click" @command="handleCommand">
+          <span @click.stop>
+            <el-icon class="more-icon"><MoreFilled /></el-icon>
+          </span>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="snooze">

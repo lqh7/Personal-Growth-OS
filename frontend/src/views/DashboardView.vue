@@ -6,12 +6,6 @@
         <h1 class="page-title">工作台</h1>
         <p class="page-subtitle">{{ currentDate }} · {{ greeting }}</p>
       </div>
-      <div class="header-right">
-        <el-button type="primary" @click="handleQuickTask">
-          <el-icon><Plus /></el-icon>
-          快速创建任务
-        </el-button>
-      </div>
     </div>
 
     <!-- Statistics Cards -->
@@ -124,7 +118,6 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  Plus,
   Clock,
   InfoFilled,
   SuccessFilled
@@ -271,34 +264,9 @@ const floatingTasks = computed<FloatingTask[]>(() => {
     })
 })
 
-const recentActivities = ref<Activity[]>([
-  {
-    id: '1',
-    type: 'task_completed',
-    title: '完成了任务"优化数据库查询性能"',
-    timestamp: new Date(Date.now() - 30 * 60 * 1000) // 30分钟前
-  },
-  {
-    id: '2',
-    type: 'note_created',
-    title: '创建了笔记"Vue 3 Composition API 最佳实践"',
-    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000) // 2小时前
-  },
-  {
-    id: '3',
-    type: 'task_created',
-    title: '创建了任务"准备下周的项目演示"',
-    timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000) // 3小时前
-  },
-  {
-    id: '4',
-    type: 'review_generated',
-    title: 'AI 生成了本周复盘报告',
-    timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000) // 昨天
-  }
-])
+const recentActivities = ref<Activity[]>([])
 
-// Calendar tasks - tasks with start times (excluding snoozed tasks)
+// Calendar tasks - all active tasks (completed/snoozed excluded)
 const calendarTasks = computed(() => {
   const now = new Date()
   return taskStore.tasks
@@ -307,8 +275,8 @@ const calendarTasks = computed(() => {
       if (task.status === 'completed') return false
       // Exclude snoozed tasks (they appear in floating tasks)
       if (task.snooze_until && new Date(task.snooze_until) > now) return false
-      // Include tasks with start times
-      return task.start_time !== undefined
+      // Include ALL active tasks (with or without start_time)
+      return true
     })
     .map(task => toViewTask(task))
 })
@@ -340,11 +308,6 @@ const greeting = computed(() => {
 // ============================================
 // Methods
 // ============================================
-function handleQuickTask() {
-  ElMessage.success('跳转到任务创建页面（将在 TasksView 中实现）')
-  router.push('/tasks')
-}
-
 function handleStatClick(key: string) {
   ElMessage.info(`点击了统计卡片: ${key}`)
   router.push('/tasks')
@@ -419,13 +382,28 @@ function handleDragStart(task: FloatingTask, event: DragEvent) {
 
 async function handleTaskDrop(taskId: string, date: Date, hour: number) {
   try {
-    // Set the new start time
-    const startTime = new Date(date)
-    startTime.setHours(hour, 0, 0, 0)
+    // Create start time with correct date and hour
+    // IMPORTANT: Use date's year/month/day to avoid date jumping bug
+    const startTime = new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+      hour,
+      0,
+      0,
+      0
+    )
 
     // Set end time (default to 1 hour after start)
-    const endTime = new Date(startTime)
-    endTime.setHours(hour + 1, 0, 0, 0)
+    const endTime = new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+      hour + 1,
+      0,
+      0,
+      0
+    )
 
     // Update task: set start_time, end_time, and clear snooze
     await taskStore.updateTask(Number(taskId), {

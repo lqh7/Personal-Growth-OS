@@ -38,9 +38,10 @@ class Project(Base):
         default="#667eea",
         comment="Project color identifier (hex color code)"
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Uses local time to match frontend timezone (前端时间为准)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=datetime.now, onupdate=datetime.now
     )
 
     # Relationships
@@ -87,9 +88,10 @@ class Task(Base):
     project_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("projects.id"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Uses local time to match frontend timezone (前端时间为准)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=datetime.now, onupdate=datetime.now
     )
     completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
@@ -104,7 +106,7 @@ class Task(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'in_progress', 'completed', 'cancelled')",
+            "status IN ('pending', 'in_progress', 'completed', 'overdue')",
             name="check_task_status"
         ),
     )
@@ -132,9 +134,10 @@ class Note(Base):
     project_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("projects.id"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Uses local time to match frontend timezone (前端时间为准)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=datetime.now, onupdate=datetime.now
     )
 
     # Relationships
@@ -191,7 +194,8 @@ class UserProfileMemory(Base):
         default=True,
         comment="Soft delete flag - allows disabling without losing data"
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Uses local time to match frontend timezone (前端时间为准)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=datetime.now, onupdate=datetime.now
     )

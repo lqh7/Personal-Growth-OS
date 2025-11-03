@@ -9,7 +9,7 @@
           <span class="stat-divider">·</span>
           <span class="stat-item">进行中 {{ stats.inProgress }}</span>
           <span class="stat-divider">·</span>
-          <span class="stat-item">已完成 {{ stats.completed }}</span>
+          <span class="stat-item">已结束 {{ stats.completed }}</span>
         </div>
       </div>
       <div class="header-actions">
@@ -127,17 +127,6 @@
           <div v-if="column.tasks.length === 0" class="column-empty">
             <p>{{ column.emptyText }}</p>
           </div>
-
-          <!-- Quick Add Button -->
-          <el-button
-            v-if="column.status !== 'completed'"
-            class="quick-add-btn"
-            text
-            @click="handleQuickAddToColumn(column.status)"
-          >
-            <el-icon><Plus /></el-icon>
-            添加任务
-          </el-button>
         </div>
       </div>
     </div>
@@ -576,6 +565,7 @@
             type="datetime"
             placeholder="选择任务开始时间（必填）"
             style="width: 100%"
+            :disabled-date="disablePastDates"
           />
         </el-form-item>
 
@@ -583,16 +573,7 @@
           <el-date-picker
             v-model="taskForm.endTime"
             type="datetime"
-            placeholder="选择任务结束时间（可选）"
-            style="width: 100%"
-          />
-        </el-form-item>
-
-        <el-form-item label="截止时间">
-          <el-date-picker
-            v-model="taskForm.dueDate"
-            type="datetime"
-            placeholder="选择截止时间（可选）"
+            placeholder="选择任务结束时间（可选，默认1小时）"
             style="width: 100%"
           />
         </el-form-item>
@@ -687,6 +668,13 @@ const selectedProject = ref('')
 const selectedPriority = ref('')
 const searchQuery = ref('')
 
+// Sorting state for each column
+const columnSortConfig = ref<Record<string, { by: 'priority' | 'dueDate' | null; order: 'asc' | 'desc' }>>({
+  pending: { by: null, order: 'desc' },
+  in_progress: { by: null, order: 'desc' },
+  finished: { by: null, order: 'desc' }
+})
+
 const showIgniteDialog = ref(false)
 const showIgnitionResult = ref(false)
 const showSnoozeDialog = ref(false)
@@ -712,8 +700,7 @@ const taskForm = ref({
   priority: 3,
   projectId: '',
   startTime: null as Date | null,
-  endTime: null as Date | null,
-  dueDate: null as Date | null
+  endTime: null as Date | null
 })
 
 const projectForm = ref({
@@ -741,8 +728,35 @@ const snoozeOptions = [
 const stats = computed(() => ({
   pending: allTasks.value.filter((t) => t.status === 'pending').length,
   inProgress: allTasks.value.filter((t) => t.status === 'in_progress').length,
-  completed: allTasks.value.filter((t) => t.status === 'completed').length
+  completed: allTasks.value.filter((t) => t.status === 'completed' || t.status === 'overdue').length
 }))
+
+// Helper function to sort tasks
+function sortTasks(tasks: ViewTask[], sortBy: 'priority' | 'dueDate' | null, order: 'asc' | 'desc'): ViewTask[] {
+  if (!sortBy) return tasks
+
+  const sorted = [...tasks].sort((a, b) => {
+    if (sortBy === 'priority') {
+      // Higher priority number = higher priority (5 is highest)
+      const diff = b.priority - a.priority
+      return order === 'desc' ? diff : -diff
+    } else if (sortBy === 'dueDate') {
+      // Sort by due date (or start time if no due date)
+      const dateA = a.dueDate || a.startTime
+      const dateB = b.dueDate || b.startTime
+
+      if (!dateA && !dateB) return 0
+      if (!dateA) return 1  // No date goes to end
+      if (!dateB) return -1
+
+      const diff = dateA.getTime() - dateB.getTime()
+      return order === 'asc' ? diff : -diff
+    }
+    return 0
+  })
+
+  return sorted
+}
 
 const filteredTasks = computed(() => {
   let tasks = allTasks.value
@@ -773,29 +787,47 @@ const filteredTasks = computed(() => {
   return tasks
 })
 
-const kanbanColumns = computed<KanbanColumn[]>(() => [
-  {
-    status: 'pending',
-    label: '待办',
-    icon: '📋',
-    tasks: filteredTasks.value.filter((t) => t.status === 'pending'),
-    emptyText: '暂无待办任务'
-  },
-  {
-    status: 'in_progress',
-    label: '进行中',
-    icon: '🚀',
-    tasks: filteredTasks.value.filter((t) => t.status === 'in_progress'),
-    emptyText: '暂无进行中的任务'
-  },
-  {
-    status: 'completed',
-    label: '已完成',
-    icon: '✅',
-    tasks: filteredTasks.value.filter((t) => t.status === 'completed'),
-    emptyText: '还没有完成的任务'
-  }
-])
+const kanbanColumns = computed<KanbanColumn[]>(() => {
+  const pendingConfig = columnSortConfig.value.pending
+  const inProgressConfig = columnSortConfig.value.in_progress
+  const finishedConfig = columnSortConfig.value.finished
+
+  return [
+    {
+      status: 'pending',
+      label: '待办',
+      icon: '📋',
+      tasks: sortTasks(
+        filteredTasks.value.filter((t) => t.status === 'pending'),
+        pendingConfig.by,
+        pendingConfig.order
+      ),
+      emptyText: '暂无待办任务'
+    },
+    {
+      status: 'in_progress',
+      label: '进行中',
+      icon: '🚀',
+      tasks: sortTasks(
+        filteredTasks.value.filter((t) => t.status === 'in_progress'),
+        inProgressConfig.by,
+        inProgressConfig.order
+      ),
+      emptyText: '暂无进行中的任务'
+    },
+    {
+      status: 'finished',
+      label: '已结束',
+      icon: '🏁',
+      tasks: sortTasks(
+        filteredTasks.value.filter((t) => t.status === 'completed' || t.status === 'overdue'),
+        finishedConfig.by,
+        finishedConfig.order
+      ),
+      emptyText: '还没有结束的任务'
+    }
+  ]
+})
 
 // Get projects from project store
 const projects = computed(() => {
@@ -844,6 +876,13 @@ async function loadTasks() {
   }
 }
 
+// Disable past dates in date picker
+function disablePastDates(date: Date) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return date < today
+}
+
 function handleSearch() {
   // Mock: Debounced search
   console.log('Searching:', searchQuery.value)
@@ -859,8 +898,7 @@ function handleQuickCreate() {
     priority: 3,
     projectId: defaultProject?.id || '1',
     startTime: null,
-    endTime: null,
-    dueDate: null
+    endTime: null
   }
   showTaskDialog.value = true
 }
@@ -932,8 +970,7 @@ function handleTaskClick(taskId: string) {
       priority: task.priority,
       projectId: task.project?.id || '',
       startTime: task.startTime || null,
-      endTime: task.endTime || null,
-      dueDate: task.dueDate || null
+      endTime: task.endTime || null
     }
     showTaskDialog.value = true
   }
@@ -1001,8 +1038,21 @@ function handleNoteClick(noteId: string) {
   router.push(`/notes/${noteId}`)
 }
 
-function sortColumn(status: string, sortBy: string) {
-  ElMessage.info(`排序: ${status} - ${sortBy}`)
+function sortColumn(status: string, sortBy: 'priority' | 'dueDate') {
+  const config = columnSortConfig.value[status]
+
+  if (!config) return
+
+  // If clicking the same sort field, toggle order
+  if (config.by === sortBy) {
+    config.order = config.order === 'desc' ? 'asc' : 'desc'
+    ElMessage.info(`${sortBy === 'priority' ? '优先级' : '截止时间'}排序: ${config.order === 'desc' ? '降序' : '升序'}`)
+  } else {
+    // New sort field, default to desc
+    config.by = sortBy
+    config.order = 'desc'
+    ElMessage.info(`按${sortBy === 'priority' ? '优先级' : '截止时间'}排序`)
+  }
 }
 
 function calculateSnoozeTime(option: string): Date {
@@ -1099,31 +1149,52 @@ function handleQuickAddToProject(projectId: string) {
     priority: 3,
     projectId: projectId,
     startTime: null,
-    endTime: null,
-    dueDate: null
+    endTime: null
   }
   showTaskDialog.value = true
 }
 
 async function handleSaveTask() {
+  // 1. Validate title
   if (!taskForm.value.title.trim()) {
     ElMessage.warning('请输入任务标题')
     return
   }
 
+  // 2. Validate project
   if (!taskForm.value.projectId) {
     ElMessage.warning('请选择所属项目')
     return
   }
 
+  // 3. Validate start_time (required)
+  if (!taskForm.value.startTime) {
+    ElMessage.warning('请选择开始时间（必填）')
+    return
+  }
+
+  // 4. Validate end_time > start_time
+  if (taskForm.value.endTime && taskForm.value.startTime) {
+    if (taskForm.value.endTime <= taskForm.value.startTime) {
+      ElMessage.warning('结束时间必须晚于开始时间')
+      return
+    }
+  }
+
   try {
+    // 5. If no end_time, default to start_time + 1 hour
+    let endTime = taskForm.value.endTime
+    if (!endTime && taskForm.value.startTime) {
+      endTime = new Date(taskForm.value.startTime)
+      endTime.setHours(endTime.getHours() + 1)
+    }
+
     const taskData = {
       title: taskForm.value.title,
       description: taskForm.value.description,
       priority: taskForm.value.priority,
       startTime: taskForm.value.startTime,
-      endTime: taskForm.value.endTime,
-      dueDate: taskForm.value.dueDate,
+      endTime: endTime,
       project: taskForm.value.projectId ? {
         id: taskForm.value.projectId,
         name: '',

@@ -19,6 +19,42 @@ from app.crud import crud_task
 router = APIRouter()
 
 
+def calculate_task_status(task, now: datetime = None) -> str:
+    """
+    Calculate the correct status for a task based on current time and task times.
+    Priority: completed > overdue > in_progress > pending
+
+    Note: Uses local time to match frontend's timezone (前端时间为准)
+    """
+    if now is None:
+        now = datetime.now()
+
+    # Priority 1: completed - never auto-update
+    if task.status == 'completed':
+        return 'completed'
+
+    # Priority 2: overdue - now >= end_time
+    if task.end_time and now >= task.end_time:
+        return 'overdue'
+
+    # Priority 3: in_progress - start_time <= now < end_time
+    if task.start_time and now >= task.start_time:
+        if task.end_time:
+            # Has end_time: check if now < end_time
+            if now < task.end_time:
+                return 'in_progress'
+        else:
+            # No end_time: just check started
+            return 'in_progress'
+
+    # Priority 4: pending - now < start_time
+    if task.start_time and now < task.start_time:
+        return 'pending'
+
+    # Default: return current status
+    return task.status
+
+
 # Temporarily disabled - requires langgraph dependency
 # @router.get("/agent/visualization")
 # def get_agent_visualization():
@@ -61,6 +97,16 @@ def list_tasks(
         status=status,
         include_snoozed=include_snoozed
     )
+
+    # Auto-update task status based on current time, start_time, and end_time
+    # Priority: completed > overdue > in_progress > pending
+    now = datetime.now()
+    for task in tasks:
+        correct_status = calculate_task_status(task, now)
+        if correct_status != task.status:
+            task.status = correct_status
+            db.commit()
+
     return tasks
 
 
@@ -76,7 +122,34 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
 @router.post("/", response_model=Task, status_code=201)
 def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     """Create a new task."""
-    return crud_task.create_task(db, task)
+    # Debug: print received data
+    print(f"[DEBUG] Received task data:")
+    print(f"  - title: {task.title}")
+    print(f"  - start_time: {task.start_time} (type: {type(task.start_time)})")
+    print(f"  - end_time: {task.end_time} (type: {type(task.end_time)})")
+    print(f"  - status: {task.status}")
+
+    created_task = crud_task.create_task(db, task)
+    print(f"[DEBUG] Task created in DB:")
+    print(f"  - id: {created_task.id}")
+    print(f"  - start_time: {created_task.start_time}")
+    print(f"  - end_time: {created_task.end_time}")
+    print(f"  - status: {created_task.status}")
+
+    # Auto-calculate correct status based on current time (uses local time)
+    now = datetime.now()
+    print(f"[DEBUG] Current time: {now}")
+
+    correct_status = calculate_task_status(created_task, now)
+    print(f"[DEBUG] Calculated status: {correct_status} (current: {created_task.status})")
+
+    if correct_status != created_task.status:
+        created_task.status = correct_status
+        db.commit()
+        db.refresh(created_task)
+        print(f"[DEBUG] Status updated to: {created_task.status}")
+
+    return created_task
 
 
 @router.put("/{task_id}", response_model=Task)

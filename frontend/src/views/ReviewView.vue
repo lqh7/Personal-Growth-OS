@@ -209,76 +209,10 @@ let knowledgeChart: ECharts | null = null
 let timeDistributionChart: ECharts | null = null
 let projectProgressChart: ECharts | null = null
 
-// Mock data
-const summaryCards = ref<SummaryCard[]>([
-  {
-    key: 'completed',
-    icon: '✅',
-    label: '已完成任务',
-    value: 27,
-    trendType: 'up',
-    trendText: '比上周 +15%'
-  },
-  {
-    key: 'completion_rate',
-    icon: '📊',
-    label: '完成率',
-    value: '82%',
-    trendType: 'up',
-    trendText: '提升 8%'
-  },
-  {
-    key: 'notes_created',
-    icon: '📝',
-    label: '新增笔记',
-    value: 12,
-    trendType: 'up',
-    trendText: '比上周 +3'
-  },
-  {
-    key: 'focus_time',
-    icon: '⏱️',
-    label: '专注时长',
-    value: '24h',
-    trendType: 'down',
-    trendText: '比上周 -2h'
-  }
-])
+// Data will be loaded from API
+const summaryCards = ref<SummaryCard[]>([])
 
-const insights = ref<Insight[]>([
-  {
-    id: '1',
-    type: 'positive',
-    icon: '🎉',
-    title: '高效时段发现',
-    description: '你在周四下午的工作效率最高，完成了40%的高优先级任务。',
-    suggestion: '建议将重要任务安排在周四下午进行。'
-  },
-  {
-    id: '2',
-    type: 'warning',
-    icon: '⚠️',
-    title: '拖延模式识别',
-    description: '文档编写类任务平均延后3.5天，是拖延最严重的任务类型。',
-    suggestion: '可以尝试将文档任务分解为更小的子任务，降低启动门槛。'
-  },
-  {
-    id: '3',
-    type: 'info',
-    icon: '💡',
-    title: '知识增长趋势',
-    description: '本周在"前端开发"主题下新增了8条笔记，形成了完整的知识链。',
-    suggestion: '建议整理相关笔记，创建一个主题总结。'
-  },
-  {
-    id: '4',
-    type: 'positive',
-    icon: '🚀',
-    title: '连续完成记录',
-    description: '你已经连续5天完成每日计划任务，保持了良好的习惯。',
-    suggestion: '继续保持！可以设置更具挑战性的目标。'
-  }
-])
+const insights = ref<Insight[]>([])
 
 // ============================================
 // Methods

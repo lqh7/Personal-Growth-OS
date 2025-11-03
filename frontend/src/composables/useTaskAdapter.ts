@@ -8,7 +8,7 @@ export interface ViewTask {
   id: string
   title: string
   description?: string
-  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  status: 'pending' | 'in_progress' | 'completed' | 'overdue'
   priority: number
   startTime?: Date
   endTime?: Date
@@ -53,6 +53,21 @@ export function useTaskAdapter() {
   }
 
   /**
+   * Format Date to local datetime string (preserves timezone)
+   * Converts: 2025-11-03 14:00 → "2025-11-03T14:00:00"
+   */
+  function formatLocalDateTime(date: Date): string {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    const seconds = String(date.getSeconds()).padStart(2, '0')
+
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
+  }
+
+  /**
    * Convert View Task to API format for create/update
    */
   function toApiTask(viewTask: Partial<ViewTask>) {
@@ -64,15 +79,15 @@ export function useTaskAdapter() {
     if (viewTask.priority !== undefined) apiTask.priority = viewTask.priority
 
     if (viewTask.startTime) {
-      apiTask.start_time = viewTask.startTime.toISOString()
+      apiTask.start_time = formatLocalDateTime(viewTask.startTime)
     }
 
     if (viewTask.endTime) {
-      apiTask.end_time = viewTask.endTime.toISOString()
+      apiTask.end_time = formatLocalDateTime(viewTask.endTime)
     }
 
     if (viewTask.dueDate) {
-      apiTask.due_date = viewTask.dueDate.toISOString()
+      apiTask.due_date = formatLocalDateTime(viewTask.dueDate)
     }
 
     if (viewTask.project?.id) {

@@ -6,9 +6,11 @@ export interface Task {
   id: number
   title: string
   description?: string
-  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  status: 'pending' | 'in_progress' | 'completed' | 'overdue'
   priority: number
   due_date?: string
+  start_time?: string
+  end_time?: string
   snooze_until?: string
   parent_task_id?: number
   project_id?: number
@@ -24,6 +26,8 @@ export interface TaskCreate {
   status?: string
   priority?: number
   due_date?: string
+  start_time?: string
+  end_time?: string
   snooze_until?: string
   parent_task_id?: number
   project_id?: number

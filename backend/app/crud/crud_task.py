@@ -44,10 +44,11 @@ def get_tasks(
 
     if not include_snoozed:
         # Exclude tasks that are snoozed (snooze_until is in the future)
+        # Uses local time to match frontend timezone (前端时间为准)
         query = query.filter(
             or_(
                 Task.snooze_until.is_(None),
-                Task.snooze_until <= datetime.utcnow()
+                Task.snooze_until <= datetime.now()
             )
         )
 
@@ -72,8 +73,9 @@ def update_task(db: Session, task_id: int, task_update: TaskUpdate) -> Optional[
     update_data = task_update.model_dump(exclude_unset=True)
 
     # If status is being changed to 'completed', set completed_at
+    # Uses local time to match frontend timezone (前端时间为准)
     if update_data.get("status") == "completed" and db_task.status != "completed":
-        update_data["completed_at"] = datetime.utcnow()
+        update_data["completed_at"] = datetime.now()
 
     for field, value in update_data.items():
         setattr(db_task, field, value)

@@ -25,6 +25,10 @@ export const useTaskStore = defineStore('task', () => {
     tasks.value.filter(t => t.status === 'completed')
   )
 
+  const finishedTasks = computed(() =>
+    tasks.value.filter(t => t.status === 'completed' || t.status === 'overdue')
+  )
+
   // Actions
   async function fetchTasks(includeSnoozed = false) {
     loading.value = true
@@ -143,6 +147,7 @@ export const useTaskStore = defineStore('task', () => {
     pendingTasks,
     inProgressTasks,
     completedTasks,
+    finishedTasks,
 
     // Actions
     fetchTasks,

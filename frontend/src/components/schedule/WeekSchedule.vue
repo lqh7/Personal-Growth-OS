@@ -73,27 +73,69 @@
             </div>
 
             <!-- Tasks in this time slot -->
-            <div
-              v-for="task in getTasksAtTime(day.tasks, hour)"
-              :key="task.id"
-              class="schedule-task"
-              :class="[
-                `priority-${task.priority}`,
-                { 'is-completed': task.completed }
-              ]"
-              :style="{ height: calculateTaskHeight(task) }"
-              @click.stop="handleTaskClick(task)"
-            >
-              <div class="task-time">{{ formatTaskTime(task) }}</div>
-              <div class="task-title">{{ task.title }}</div>
-              <div v-if="task.project" class="task-project">
-                <span
-                  class="project-dot"
-                  :style="{ backgroundColor: task.project.color }"
-                ></span>
-                {{ task.project.name }}
-              </div>
-            </div>
+            <template v-if="getTasksAtTime(day.tasks, hour).length > 0">
+              <template v-for="(task, taskIndex) in getTasksAtTime(day.tasks, hour)" :key="task.id">
+                <!-- Only show the first task, hide the rest -->
+                <div
+                  v-if="taskIndex === 0"
+                  class="schedule-task"
+                  :class="[
+                    `priority-${task.priority}`,
+                    { 'is-completed': task.completed, 'has-overflow': getTasksAtTime(day.tasks, hour).length > 1 }
+                  ]"
+                  :style="{ height: calculateTaskHeight(task) }"
+                  @click.stop="handleTaskClick(task)"
+                >
+                  <div class="task-time">{{ formatTaskTime(task) }}</div>
+                  <div class="task-title">{{ task.title }}</div>
+                  <div v-if="task.project" class="task-project">
+                    <span
+                      class="project-dot"
+                      :style="{ backgroundColor: task.project.color }"
+                    ></span>
+                    {{ task.project.name }}
+                  </div>
+
+                  <!-- Overflow Badge: Show +N if there are more tasks -->
+                  <el-popover
+                    v-if="getTasksAtTime(day.tasks, hour).length > 1"
+                    placement="right"
+                    :width="300"
+                    trigger="hover"
+                  >
+                    <template #reference>
+                      <div class="task-overflow-badge" @click.stop>
+                        +{{ getTasksAtTime(day.tasks, hour).length - 1 }}
+                      </div>
+                    </template>
+
+                    <!-- Popover Content: List all tasks -->
+                    <div class="task-overflow-list">
+                      <div class="overflow-list-header">
+                        该时间段的所有任务 ({{ getTasksAtTime(day.tasks, hour).length }})
+                      </div>
+                      <div
+                        v-for="overflowTask in getTasksAtTime(day.tasks, hour)"
+                        :key="overflowTask.id"
+                        class="overflow-task-item"
+                        :class="[`priority-${overflowTask.priority}`, { 'is-completed': overflowTask.completed }]"
+                        @click="handleTaskClick(overflowTask)"
+                      >
+                        <div class="overflow-task-time">{{ formatTaskTime(overflowTask) }}</div>
+                        <div class="overflow-task-title">{{ overflowTask.title }}</div>
+                        <div v-if="overflowTask.project" class="overflow-task-project">
+                          <span
+                            class="project-dot"
+                            :style="{ backgroundColor: overflowTask.project.color }"
+                          ></span>
+                          {{ overflowTask.project.name }}
+                        </div>
+                      </div>
+                    </div>
+                  </el-popover>
+                </div>
+              </template>
+            </template>
           </div>
         </div>
       </div>
@@ -256,9 +298,9 @@ function getTasksAtTime(dayTasks: Task[], hour: number): Task[] {
 }
 
 function calculateTaskHeight(task: Task): string {
-  // If no end_time, default to 30 minutes (half slot)
+  // If no end_time, default to 1 hour (60px full slot)
   if (!task.endTime || !task.startTime) {
-    return '30px'
+    return '60px'
   }
 
   const start = new Date(task.startTime)
@@ -637,6 +679,128 @@ function handleDrop(date: Date, hour: number, event: DragEvent) {
       width: 6px;
       height: 6px;
       border-radius: $radius-round;
+    }
+  }
+
+  // Overflow Badge
+  .task-overflow-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background-color: $color-primary;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: $radius-round;
+    cursor: pointer;
+    z-index: 10;
+    box-shadow: $shadow-sm;
+    transition: all $transition-fast;
+
+    &:hover {
+      background-color: darken($color-primary, 10%);
+      transform: scale(1.1);
+    }
+  }
+
+  // Add visual indicator when task has overflow
+  &.has-overflow {
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 0;
+      height: 0;
+      border-style: solid;
+      border-width: 0 20px 20px 0;
+      border-color: transparent rgba($color-primary, 0.2) transparent transparent;
+      border-top-right-radius: $radius-sm;
+    }
+  }
+}
+
+// ============================================
+// Task Overflow Popover List
+// ============================================
+.task-overflow-list {
+  .overflow-list-header {
+    font-size: $font-size-sm;
+    font-weight: 600;
+    color: $color-text-primary;
+    padding-bottom: $spacing-sm;
+    margin-bottom: $spacing-sm;
+    border-bottom: 1px solid $color-border;
+  }
+
+  .overflow-task-item {
+    padding: $spacing-sm;
+    margin-bottom: $spacing-xs;
+    border-radius: $radius-sm;
+    border-left: 3px solid;
+    background-color: $bg-color-hover;
+    cursor: pointer;
+    transition: all $transition-fast;
+
+    &:hover {
+      background-color: darken($bg-color-hover, 5%);
+      transform: translateX(2px);
+    }
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    &.is-completed {
+      opacity: 0.6;
+      text-decoration: line-through;
+    }
+
+    // Priority colors
+    &.priority-5,
+    &.priority-4 {
+      border-color: $color-danger;
+      background-color: rgba($color-danger, 0.05);
+    }
+
+    &.priority-3,
+    &.priority-2 {
+      border-color: $color-warning;
+      background-color: rgba($color-warning, 0.05);
+    }
+
+    &.priority-1,
+    &.priority-0 {
+      border-color: $color-primary;
+      background-color: rgba($color-primary, 0.05);
+    }
+
+    .overflow-task-time {
+      font-size: $font-size-xs;
+      color: $color-text-tertiary;
+      margin-bottom: $spacing-xs;
+    }
+
+    .overflow-task-title {
+      font-size: $font-size-sm;
+      font-weight: 500;
+      color: $color-text-primary;
+      margin-bottom: $spacing-xs;
+    }
+
+    .overflow-task-project {
+      display: flex;
+      align-items: center;
+      gap: $spacing-xs;
+      font-size: $font-size-xs;
+      color: $color-text-secondary;
+
+      .project-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: $radius-round;
+      }
     }
   }
 }
