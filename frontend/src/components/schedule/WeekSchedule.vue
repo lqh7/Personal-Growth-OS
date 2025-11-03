@@ -73,17 +73,17 @@
             </div>
 
             <!-- Tasks in this time slot -->
-            <template v-if="getTasksAtTime(day.tasks, hour).length > 0">
-              <template v-for="(task, taskIndex) in getTasksAtTime(day.tasks, hour)" :key="task.id">
+            <template v-if="getTasksAtTime(day.tasks, day.date, hour).length > 0">
+              <template v-for="(task, taskIndex) in getTasksAtTime(day.tasks, day.date, hour)" :key="task.id">
                 <!-- Only show the first task, hide the rest -->
                 <div
                   v-if="taskIndex === 0"
                   class="schedule-task"
                   :class="[
                     `priority-${task.priority}`,
-                    { 'is-completed': task.completed, 'has-overflow': getTasksAtTime(day.tasks, hour).length > 1 }
+                    { 'is-completed': task.completed, 'has-overflow': getActiveTasksAtTime(day.tasks, day.date, hour).length > 1 }
                   ]"
-                  :style="{ height: calculateTaskHeight(task) }"
+                  :style="{ height: calculateTaskHeight(task, day.date) }"
                   @click.stop="handleTaskClick(task)"
                 >
                   <div class="task-time">{{ formatTaskTime(task) }}</div>
@@ -96,26 +96,26 @@
                     {{ task.project.name }}
                   </div>
 
-                  <!-- Overflow Badge: Show +N if there are more tasks -->
+                  <!-- Overflow Badge: Show +N if there are active overlapping tasks -->
                   <el-popover
-                    v-if="getTasksAtTime(day.tasks, hour).length > 1"
+                    v-if="getActiveTasksAtTime(day.tasks, day.date, hour).length > 1"
                     placement="right"
                     :width="300"
                     trigger="hover"
                   >
                     <template #reference>
                       <div class="task-overflow-badge" @click.stop>
-                        +{{ getTasksAtTime(day.tasks, hour).length - 1 }}
+                        +{{ getActiveTasksAtTime(day.tasks, day.date, hour).length - 1 }}
                       </div>
                     </template>
 
-                    <!-- Popover Content: List all tasks -->
+                    <!-- Popover Content: List all active tasks in this time slot -->
                     <div class="task-overflow-list">
                       <div class="overflow-list-header">
-                        该时间段的所有任务 ({{ getTasksAtTime(day.tasks, hour).length }})
+                        该时间段的所有任务 ({{ getActiveTasksAtTime(day.tasks, day.date, hour).length }})
                       </div>
                       <div
-                        v-for="overflowTask in getTasksAtTime(day.tasks, hour)"
+                        v-for="overflowTask in getActiveTasksAtTime(day.tasks, day.date, hour)"
                         :key="overflowTask.id"
                         class="overflow-task-item"
                         :class="[`priority-${overflowTask.priority}`, { 'is-completed': overflowTask.completed }]"
@@ -280,32 +280,90 @@ function getStartOfWeek(date: Date): Date {
 function getTasksForDay(date: Date): Task[] {
   return props.tasks.filter(task => {
     if (!task.startTime) return false
-    const taskDate = new Date(task.startTime)
-    return (
-      taskDate.getFullYear() === date.getFullYear() &&
-      taskDate.getMonth() === date.getMonth() &&
-      taskDate.getDate() === date.getDate()
-    )
+
+    const taskStart = new Date(task.startTime)
+    const taskEnd = task.endTime ? new Date(task.endTime) : new Date(taskStart.getTime() + 60 * 60 * 1000) // Default 1 hour
+
+    // Create day boundaries (00:00 to 23:59:59.999)
+    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
+    const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
+
+    // Check if task time range overlaps with this day
+    // Task overlaps if: taskStart < dayEnd AND taskEnd > dayStart
+    return taskStart < dayEnd && taskEnd > dayStart
   })
 }
 
-function getTasksAtTime(dayTasks: Task[], hour: number): Task[] {
+function getTasksAtTime(dayTasks: Task[], currentDate: Date, hour: number): Task[] {
   return dayTasks.filter(task => {
     if (!task.startTime) return false
-    const taskDate = new Date(task.startTime)
-    return taskDate.getHours() === hour
+
+    const taskStart = new Date(task.startTime)
+
+    // Check if task starts on the current day
+    const taskStartDate = new Date(taskStart.getFullYear(), taskStart.getMonth(), taskStart.getDate())
+    const currentDayDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
+    const isTaskStartDay = taskStartDate.getTime() === currentDayDate.getTime()
+
+    if (isTaskStartDay) {
+      // Task starts on this day: show only at its start hour
+      return taskStart.getHours() === hour
+    } else {
+      // Task started on a previous day (cross-day task): show only at first hour (8:00)
+      return hour === 8 // First hour in the schedule
+    }
   })
 }
 
-function calculateTaskHeight(task: Task): string {
+function getActiveTasksAtTime(dayTasks: Task[], currentDate: Date, hour: number): Task[] {
+  return dayTasks.filter(task => {
+    if (!task.startTime) return false
+
+    const taskStart = new Date(task.startTime)
+    const taskEnd = task.endTime ? new Date(task.endTime) : new Date(taskStart.getTime() + 60 * 60 * 1000) // Default 1 hour
+
+    // Create slot time boundaries (e.g., 8:00-9:00)
+    const slotStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), hour, 0, 0, 0)
+    const slotEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), hour + 1, 0, 0, 0)
+
+    // Task is active in this slot if: taskStart < slotEnd AND taskEnd > slotStart
+    return taskStart < slotEnd && taskEnd > slotStart
+  })
+}
+
+function calculateTaskHeight(task: Task, currentDate: Date): string {
   // If no end_time, default to 1 hour (60px full slot)
   if (!task.endTime || !task.startTime) {
     return '60px'
   }
 
-  const start = new Date(task.startTime)
-  const end = new Date(task.endTime)
-  const durationMinutes = (end.getTime() - start.getTime()) / (1000 * 60)
+  const taskStart = new Date(task.startTime)
+  const taskEnd = new Date(task.endTime)
+
+  // Check if task starts on the current day
+  const taskStartDate = new Date(taskStart.getFullYear(), taskStart.getMonth(), taskStart.getDate())
+  const currentDayDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
+  const isTaskStartDay = taskStartDate.getTime() === currentDayDate.getTime()
+
+  let effectiveStart: Date
+  let effectiveEnd: Date
+
+  if (isTaskStartDay) {
+    // Task starts on this day
+    effectiveStart = taskStart
+    // If task ends on a later day, limit to end of current day
+    const dayEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 23, 59, 59, 999)
+    effectiveEnd = taskEnd > dayEnd ? dayEnd : taskEnd
+  } else {
+    // Task started on a previous day (cross-day task)
+    // Start from beginning of current day (00:00)
+    effectiveStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 0, 0, 0, 0)
+    // End at task end time or end of current day, whichever is earlier
+    const dayEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 23, 59, 59, 999)
+    effectiveEnd = taskEnd > dayEnd ? dayEnd : taskEnd
+  }
+
+  const durationMinutes = (effectiveEnd.getTime() - effectiveStart.getTime()) / (1000 * 60)
 
   // 60px per hour
   const height = (durationMinutes / 60) * 60
@@ -327,9 +385,25 @@ function formatTaskTime(task: Task): string {
   }
 
   const end = new Date(task.endTime)
-  const endStr = `${end.getHours().toString().padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}`
 
-  return `${startStr}-${endStr}`
+  // Check if task spans multiple days
+  const isCrossDay = start.getDate() !== end.getDate() ||
+                     start.getMonth() !== end.getMonth() ||
+                     start.getFullYear() !== end.getFullYear()
+
+  if (isCrossDay) {
+    // Cross-day format: "11/3 20:00 → 11/4 10:00"
+    const startDate = `${start.getMonth() + 1}/${start.getDate()}`
+    const endDate = `${end.getMonth() + 1}/${end.getDate()}`
+    const startTime = `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')}`
+    const endTime = `${end.getHours().toString().padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}`
+
+    return `${startDate} ${startTime} → ${endDate} ${endTime}`
+  } else {
+    // Same day format: "14:00-15:30"
+    const endStr = `${end.getHours().toString().padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}`
+    return `${startStr}-${endStr}`
+  }
 }
 
 function isToday(date: Date): boolean {
