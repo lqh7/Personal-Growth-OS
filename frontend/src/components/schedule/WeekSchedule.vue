@@ -21,7 +21,9 @@
     <div class="schedule-grid">
       <!-- Time Column -->
       <div class="time-column">
-        <div class="time-header">时间</div>
+        <div class="time-header">
+          <div class="all-day-label">全天</div>
+        </div>
         <div
           v-for="hour in hours"
           :key="hour"
@@ -33,110 +35,86 @@
 
       <!-- Day Columns -->
       <div
-        v-for="(day, index) in weekDays"
+        v-for="day in weekDays"
         :key="day.date.toISOString()"
         class="day-column"
         :class="{ 'is-today': isToday(day.date) }"
       >
         <!-- Day Header -->
         <div class="day-header">
-          <div class="day-name">{{ day.name }}</div>
-          <div class="day-date" :class="{ 'is-today-date': isToday(day.date) }">
-            {{ day.date.getDate() }}
+          <div class="header-top">
+            <div class="day-name">{{ day.name }}</div>
+            <div class="day-date" :class="{ 'is-today-date': isToday(day.date) }">
+              {{ day.date.getDate() }}
+            </div>
           </div>
-          <div class="day-task-count">{{ day.tasks.length }}</div>
+
+          <!-- All-day Events Area (20px height) -->
+          <div class="all-day-events">
+            <div
+              v-for="task in day.allDayTasks"
+              :key="task.id"
+              class="all-day-task"
+              :class="getPriorityClass(task.priority)"
+              @click="handleTaskClick(task)"
+            >
+              {{ task.title }}
+            </div>
+            <div v-if="day.allDayTasks.length === 0" class="all-day-empty">
+              无全天任务
+            </div>
+          </div>
         </div>
 
-        <!-- Time Slots -->
-        <div class="day-slots">
+        <!-- Time Slots Container (780px = 13 hours × 60px) -->
+        <div
+          class="day-slots"
+          @click="handleSlotClick(day.date, $event)"
+          @dragover.prevent="handleDragOver($event, day.date)"
+          @drop="handleDrop(day.date, $event)"
+        >
+          <!-- Hour Grid Lines (background) -->
           <div
             v-for="hour in hours"
-            :key="`${day.date.toISOString()}-${hour}`"
-            class="time-slot"
-            :data-slot-key="`${day.date.toISOString()}-${hour}`"
-            @click="handleSlotClick(day.date, hour)"
-            @dragover.prevent="handleDragOver($event)"
-            @drop="handleDrop(day.date, hour, $event)"
+            :key="`grid-${hour}`"
+            class="hour-grid-line"
+            :style="{ top: `${(hour - 8) * 60}px` }"
+          ></div>
+
+          <!-- Drag Preview Overlay -->
+          <div
+            v-if="dragPreview && dragPreview.date.toDateString() === day.date.toDateString()"
+            class="drag-preview"
+            :style="{ top: `${dragPreview.top}px`, height: '60px' }"
           >
-            <!-- Drag Preview Overlay -->
-            <div v-if="dragOverSlot === `${day.date.toISOString()}-${hour}`" class="drag-preview">
-              <div class="drag-preview-task">
-                <div class="task-title">{{ draggingTask?.title }}</div>
-                <div v-if="draggingTask?.project" class="task-project">
-                  <span
-                    class="project-dot"
-                    :style="{ backgroundColor: draggingTask.project.color }"
-                  ></span>
-                  {{ draggingTask.project.name }}
-                </div>
-              </div>
+            <div class="drag-preview-content">
+              {{ draggingTask?.title }}
             </div>
-
-            <!-- Tasks in this time slot -->
-            <template v-if="getTasksAtTime(day.tasks, day.date, hour).length > 0">
-              <template v-for="(task, taskIndex) in getTasksAtTime(day.tasks, day.date, hour)" :key="task.id">
-                <!-- Only show the first task, hide the rest -->
-                <div
-                  v-if="taskIndex === 0"
-                  class="schedule-task"
-                  :class="[
-                    `priority-${task.priority}`,
-                    { 'is-completed': task.completed, 'has-overflow': getActiveTasksAtTime(day.tasks, day.date, hour).length > 1 }
-                  ]"
-                  :style="{ height: calculateTaskHeight(task, day.date) }"
-                  @click.stop="handleTaskClick(task)"
-                >
-                  <div class="task-time">{{ formatTaskTime(task) }}</div>
-                  <div class="task-title">{{ task.title }}</div>
-                  <div v-if="task.project" class="task-project">
-                    <span
-                      class="project-dot"
-                      :style="{ backgroundColor: task.project.color }"
-                    ></span>
-                    {{ task.project.name }}
-                  </div>
-
-                  <!-- Overflow Badge: Show +N if there are active overlapping tasks -->
-                  <el-popover
-                    v-if="getActiveTasksAtTime(day.tasks, day.date, hour).length > 1"
-                    placement="right"
-                    :width="300"
-                    trigger="hover"
-                  >
-                    <template #reference>
-                      <div class="task-overflow-badge" @click.stop>
-                        +{{ getActiveTasksAtTime(day.tasks, day.date, hour).length - 1 }}
-                      </div>
-                    </template>
-
-                    <!-- Popover Content: List all active tasks in this time slot -->
-                    <div class="task-overflow-list">
-                      <div class="overflow-list-header">
-                        该时间段的所有任务 ({{ getActiveTasksAtTime(day.tasks, day.date, hour).length }})
-                      </div>
-                      <div
-                        v-for="overflowTask in getActiveTasksAtTime(day.tasks, day.date, hour)"
-                        :key="overflowTask.id"
-                        class="overflow-task-item"
-                        :class="[`priority-${overflowTask.priority}`, { 'is-completed': overflowTask.completed }]"
-                        @click="handleTaskClick(overflowTask)"
-                      >
-                        <div class="overflow-task-time">{{ formatTaskTime(overflowTask) }}</div>
-                        <div class="overflow-task-title">{{ overflowTask.title }}</div>
-                        <div v-if="overflowTask.project" class="overflow-task-project">
-                          <span
-                            class="project-dot"
-                            :style="{ backgroundColor: overflowTask.project.color }"
-                          ></span>
-                          {{ overflowTask.project.name }}
-                        </div>
-                      </div>
-                    </div>
-                  </el-popover>
-                </div>
-              </template>
-            </template>
           </div>
+
+          <!-- Render Items (TaskCard or AggregationBlock) -->
+          <template v-for="item in day.renderItems" :key="item.id">
+            <!-- Independent Task: Use TaskCard -->
+            <TaskCard
+              v-if="item.type === 'task'"
+              :task="item.task"
+              :top="item.top"
+              :height="item.height"
+              :render-start-time="item.renderStartTime"
+              :render-end-time="item.renderEndTime"
+              @task-click="handleTaskClick"
+            />
+
+            <!-- Overlapping Tasks: Use AggregationBlock -->
+            <AggregationBlock
+              v-else-if="item.type === 'aggregation'"
+              :tasks="item.tasks"
+              :display-task="item.displayTask"
+              :top="item.top"
+              :height="item.height"
+              @task-click="handleTaskClick"
+            />
+          </template>
         </div>
       </div>
     </div>
@@ -157,7 +135,11 @@
           @dragend="handleDragEnd"
           @click="handleTaskClick(task)"
         >
-          <el-checkbox v-model="task.completed" @change="$emit('task-complete', task)" />
+          <el-checkbox
+            v-model="task.completed"
+            @change="$emit('task-complete', task)"
+            @click.stop
+          />
           <span class="task-title" :class="{ 'is-completed': task.completed }">
             {{ task.title }}
           </span>
@@ -178,6 +160,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { ArrowLeft, ArrowRight, Clock } from '@element-plus/icons-vue'
+import TaskCard from './TaskCard.vue'
+import AggregationBlock from './AggregationBlock.vue'
 
 // ============================================
 // Types
@@ -189,8 +173,8 @@ interface Task {
   status: 'pending' | 'in_progress' | 'completed'
   priority: number
   dueDate?: Date
-  startTime?: Date // Changed from dueTime
-  endTime?: Date // New field
+  startTime?: Date
+  endTime?: Date
   completed: boolean
   project?: {
     id: string
@@ -199,10 +183,38 @@ interface Task {
   }
 }
 
+interface TaskRenderItem {
+  type: 'task'
+  id: string
+  task: Task
+  top: number
+  height: number
+  renderStartTime: Date
+  renderEndTime: Date
+}
+
+interface AggregationRenderItem {
+  type: 'aggregation'
+  id: string
+  tasks: Task[]
+  displayTask: Task
+  top: number
+  height: number
+}
+
+type RenderItem = TaskRenderItem | AggregationRenderItem
+
 interface WeekDay {
   name: string
   date: Date
   tasks: Task[]
+  allDayTasks: Task[]
+  renderItems: RenderItem[]
+}
+
+interface DragPreview {
+  date: Date
+  top: number
 }
 
 // ============================================
@@ -224,9 +236,14 @@ const emit = defineEmits<{
 // State
 // ============================================
 const currentWeekStart = ref(getStartOfWeek(new Date()))
-const hours = Array.from({ length: 14 }, (_, i) => i + 8) // 8:00 - 21:00
+const hours = Array.from({ length: 13 }, (_, i) => i + 8) // 8:00 - 20:00
 const draggingTask = ref<Task | null>(null)
-const dragOverSlot = ref<string | null>(null)
+const dragPreview = ref<DragPreview | null>(null)
+
+// Constants
+const SCHEDULE_START_HOUR = 8
+const SCHEDULE_END_HOUR = 21
+const MINUTES_PER_PIXEL = 1 // 1 minute = 1 px
 
 // ============================================
 // Computed
@@ -239,10 +256,16 @@ const weekDays = computed<WeekDay[]>(() => {
     const date = new Date(currentWeekStart.value)
     date.setDate(date.getDate() + i)
 
+    const dayTasks = getTasksForDay(date)
+    const allDayTasks = dayTasks.filter(t => isAllDayTask(t))
+    const timedTasks = dayTasks.filter(t => !isAllDayTask(t))
+
     days.push({
       name: dayNames[i],
       date,
-      tasks: getTasksForDay(date)
+      tasks: dayTasks,
+      allDayTasks,
+      renderItems: computeRenderItems(timedTasks, date)
     })
   }
 
@@ -266,7 +289,159 @@ const floatingTasks = computed(() => {
 })
 
 // ============================================
-// Methods
+// Sweep Line Algorithm for Overlap Detection
+// ============================================
+interface TimeEvent {
+  time: number  // Minutes from schedule start
+  type: 'start' | 'end'
+  task: Task
+}
+
+function computeRenderItems(tasks: Task[], currentDate: Date): RenderItem[] {
+  if (tasks.length === 0) return []
+
+  const renderItems: RenderItem[] = []
+
+  // Build time events for sweep line
+  const events: TimeEvent[] = []
+
+  tasks.forEach(task => {
+    if (!task.startTime) return
+
+    const taskStart = new Date(task.startTime)
+    const taskEnd = task.endTime ? new Date(task.endTime) : new Date(taskStart.getTime() + 60 * 60 * 1000)
+
+    // Calculate render boundaries within schedule (8:00 - 21:00)
+    const scheduleStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), SCHEDULE_START_HOUR, 0, 0)
+    const scheduleEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), SCHEDULE_END_HOUR, 0, 0)
+
+    const renderStart = taskStart < scheduleStart ? scheduleStart : taskStart
+    const renderEnd = taskEnd > scheduleEnd ? scheduleEnd : taskEnd
+
+    // Skip if task is completely outside schedule
+    if (renderEnd <= scheduleStart || renderStart >= scheduleEnd) return
+
+    // Convert to minutes from schedule start
+    const startMinutes = Math.floor((renderStart.getTime() - scheduleStart.getTime()) / (1000 * 60))
+    const endMinutes = Math.floor((renderEnd.getTime() - scheduleStart.getTime()) / (1000 * 60))
+
+    events.push({ time: startMinutes, type: 'start', task })
+    events.push({ time: endMinutes, type: 'end', task })
+  })
+
+  // Sort events by time, then by type (start before end)
+  events.sort((a, b) => {
+    if (a.time !== b.time) return a.time - b.time
+    return a.type === 'start' ? -1 : 1
+  })
+
+  // Sweep line to detect overlapping segments
+  const activeTasksSet = new Set<Task>()
+  let lastTime = 0
+
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i]
+
+    // Before processing this event, check if we need to render segment from lastTime to event.time
+    if (activeTasksSet.size > 0 && event.time > lastTime) {
+      const segmentTasks = Array.from(activeTasksSet)
+      const top = lastTime * MINUTES_PER_PIXEL
+      const height = (event.time - lastTime) * MINUTES_PER_PIXEL
+
+      if (segmentTasks.length === 1) {
+        // Independent task
+        const task = segmentTasks[0]
+        const taskStart = new Date(task.startTime!)
+        const taskEnd = task.endTime ? new Date(task.endTime) : new Date(taskStart.getTime() + 60 * 60 * 1000)
+
+        const scheduleStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), SCHEDULE_START_HOUR, 0, 0)
+        const renderStartTime = taskStart < scheduleStart ? scheduleStart : taskStart
+        const renderEndTime = taskEnd
+
+        renderItems.push({
+          type: 'task',
+          id: `task-${task.id}-${lastTime}`,
+          task,
+          top,
+          height,
+          renderStartTime,
+          renderEndTime
+        })
+      } else {
+        // Overlapping tasks: create aggregation block
+        // Find highest priority task to display
+        const highestPriorityTask = segmentTasks.reduce((max, task) =>
+          task.priority > max.priority ? task : max
+        , segmentTasks[0])
+
+        renderItems.push({
+          type: 'aggregation',
+          id: `agg-${lastTime}-${event.time}`,
+          tasks: segmentTasks,
+          displayTask: highestPriorityTask,
+          top,
+          height
+        })
+      }
+    }
+
+    // Process event
+    if (event.type === 'start') {
+      activeTasksSet.add(event.task)
+    } else {
+      activeTasksSet.delete(event.task)
+    }
+
+    lastTime = event.time
+  }
+
+  // Merge consecutive items of the same type
+  return mergeConsecutiveItems(renderItems)
+}
+
+function mergeConsecutiveItems(items: RenderItem[]): RenderItem[] {
+  if (items.length === 0) return []
+
+  const merged: RenderItem[] = []
+  let current = items[0]
+
+  for (let i = 1; i < items.length; i++) {
+    const next = items[i]
+
+    // Check if can merge
+    const canMerge =
+      current.type === next.type &&
+      current.top + current.height === next.top &&
+      (current.type === 'task'
+        ? current.task.id === (next as TaskRenderItem).task.id
+        : arraysEqual(current.tasks.map(t => t.id), (next as AggregationRenderItem).tasks.map(t => t.id)))
+
+    if (canMerge) {
+      // Merge: extend height
+      current.height += next.height
+      if (current.type === 'task') {
+        current.renderEndTime = (next as TaskRenderItem).renderEndTime
+      }
+    } else {
+      merged.push(current)
+      current = next
+    }
+  }
+
+  merged.push(current)
+  return merged
+}
+
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
+// ============================================
+// Helper Functions
 // ============================================
 function getStartOfWeek(date: Date): Date {
   const d = new Date(date)
@@ -282,128 +457,31 @@ function getTasksForDay(date: Date): Task[] {
     if (!task.startTime) return false
 
     const taskStart = new Date(task.startTime)
-    const taskEnd = task.endTime ? new Date(task.endTime) : new Date(taskStart.getTime() + 60 * 60 * 1000) // Default 1 hour
+    const taskEnd = task.endTime ? new Date(task.endTime) : new Date(taskStart.getTime() + 60 * 60 * 1000)
 
     // Create day boundaries (00:00 to 23:59:59.999)
     const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
     const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
 
-    // Check if task time range overlaps with this day
-    // Task overlaps if: taskStart < dayEnd AND taskEnd > dayStart
+    // Task overlaps with this day if: taskStart < dayEnd AND taskEnd > dayStart
     return taskStart < dayEnd && taskEnd > dayStart
   })
 }
 
-function getTasksAtTime(dayTasks: Task[], currentDate: Date, hour: number): Task[] {
-  return dayTasks.filter(task => {
-    if (!task.startTime) return false
-
-    const taskStart = new Date(task.startTime)
-
-    // Check if task starts on the current day
-    const taskStartDate = new Date(taskStart.getFullYear(), taskStart.getMonth(), taskStart.getDate())
-    const currentDayDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
-    const isTaskStartDay = taskStartDate.getTime() === currentDayDate.getTime()
-
-    if (isTaskStartDay) {
-      // Task starts on this day: show only at its start hour
-      return taskStart.getHours() === hour
-    } else {
-      // Task started on a previous day (cross-day task): show only at first hour (8:00)
-      return hour === 8 // First hour in the schedule
-    }
-  })
+function isAllDayTask(task: Task): boolean {
+  // All-day task: has startTime but no specific hour (00:00), or explicitly marked
+  if (!task.startTime) return false
+  const start = new Date(task.startTime)
+  return start.getHours() === 0 && start.getMinutes() === 0 && (!task.endTime || isEndOfDay(task.endTime))
 }
 
-function getActiveTasksAtTime(dayTasks: Task[], currentDate: Date, hour: number): Task[] {
-  return dayTasks.filter(task => {
-    if (!task.startTime) return false
-
-    const taskStart = new Date(task.startTime)
-    const taskEnd = task.endTime ? new Date(task.endTime) : new Date(taskStart.getTime() + 60 * 60 * 1000) // Default 1 hour
-
-    // Create slot time boundaries (e.g., 8:00-9:00)
-    const slotStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), hour, 0, 0, 0)
-    const slotEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), hour + 1, 0, 0, 0)
-
-    // Task is active in this slot if: taskStart < slotEnd AND taskEnd > slotStart
-    return taskStart < slotEnd && taskEnd > slotStart
-  })
-}
-
-function calculateTaskHeight(task: Task, currentDate: Date): string {
-  // If no end_time, default to 1 hour (60px full slot)
-  if (!task.endTime || !task.startTime) {
-    return '60px'
-  }
-
-  const taskStart = new Date(task.startTime)
-  const taskEnd = new Date(task.endTime)
-
-  // Check if task starts on the current day
-  const taskStartDate = new Date(taskStart.getFullYear(), taskStart.getMonth(), taskStart.getDate())
-  const currentDayDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
-  const isTaskStartDay = taskStartDate.getTime() === currentDayDate.getTime()
-
-  let effectiveStart: Date
-  let effectiveEnd: Date
-
-  if (isTaskStartDay) {
-    // Task starts on this day
-    effectiveStart = taskStart
-    // If task ends on a later day, limit to end of current day
-    const dayEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 23, 59, 59, 999)
-    effectiveEnd = taskEnd > dayEnd ? dayEnd : taskEnd
-  } else {
-    // Task started on a previous day (cross-day task)
-    // Start from beginning of current day (00:00)
-    effectiveStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 0, 0, 0, 0)
-    // End at task end time or end of current day, whichever is earlier
-    const dayEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 23, 59, 59, 999)
-    effectiveEnd = taskEnd > dayEnd ? dayEnd : taskEnd
-  }
-
-  const durationMinutes = (effectiveEnd.getTime() - effectiveStart.getTime()) / (1000 * 60)
-
-  // 60px per hour
-  const height = (durationMinutes / 60) * 60
-  return `${Math.max(height, 30)}px`
+function isEndOfDay(date: Date): boolean {
+  const d = new Date(date)
+  return d.getHours() === 23 && d.getMinutes() === 59
 }
 
 function formatHour(hour: number): string {
   return `${hour.toString().padStart(2, '0')}:00`
-}
-
-function formatTaskTime(task: Task): string {
-  if (!task.startTime) return ''
-
-  const start = new Date(task.startTime)
-  const startStr = `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')}`
-
-  if (!task.endTime) {
-    return startStr
-  }
-
-  const end = new Date(task.endTime)
-
-  // Check if task spans multiple days
-  const isCrossDay = start.getDate() !== end.getDate() ||
-                     start.getMonth() !== end.getMonth() ||
-                     start.getFullYear() !== end.getFullYear()
-
-  if (isCrossDay) {
-    // Cross-day format: "11/3 20:00 → 11/4 10:00"
-    const startDate = `${start.getMonth() + 1}/${start.getDate()}`
-    const endDate = `${end.getMonth() + 1}/${end.getDate()}`
-    const startTime = `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')}`
-    const endTime = `${end.getHours().toString().padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}`
-
-    return `${startDate} ${startTime} → ${endDate} ${endTime}`
-  } else {
-    // Same day format: "14:00-15:30"
-    const endStr = `${end.getHours().toString().padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}`
-    return `${startStr}-${endStr}`
-  }
 }
 
 function isToday(date: Date): boolean {
@@ -413,6 +491,12 @@ function isToday(date: Date): boolean {
     date.getMonth() === today.getMonth() &&
     date.getDate() === today.getDate()
   )
+}
+
+function getPriorityClass(priority: number): string {
+  if (priority >= 4) return 'priority-high'
+  if (priority >= 2) return 'priority-medium'
+  return 'priority-low'
 }
 
 function previousWeek() {
@@ -431,7 +515,15 @@ function today() {
   currentWeekStart.value = getStartOfWeek(new Date())
 }
 
-function handleSlotClick(date: Date, hour: number) {
+function handleSlotClick(date: Date, event: MouseEvent) {
+  const target = event.currentTarget as HTMLElement
+  const rect = target.getBoundingClientRect()
+  const clickY = event.clientY - rect.top
+
+  // Calculate hour from click position (60px per hour)
+  const minutesFromStart = Math.floor(clickY / MINUTES_PER_PIXEL)
+  const hour = SCHEDULE_START_HOUR + Math.floor(minutesFromStart / 60)
+
   emit('slot-click', date, hour)
 }
 
@@ -444,7 +536,7 @@ function handleDragStart(task: Task, event: DragEvent) {
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('taskId', task.id)
-    // Make drag image transparent to show preview instead
+    // Transparent drag image
     const img = new Image()
     img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
     event.dataTransfer.setDragImage(img, 0, 0)
@@ -453,43 +545,44 @@ function handleDragStart(task: Task, event: DragEvent) {
 
 function handleDragEnd() {
   draggingTask.value = null
-  dragOverSlot.value = null
+  dragPreview.value = null
 }
 
-function handleDragOver(event: DragEvent) {
+function handleDragOver(event: DragEvent, date: Date) {
   event.preventDefault()
   if (event.dataTransfer) {
     event.dataTransfer.dropEffect = 'move'
   }
 
-  // Update drag preview position
+  // Calculate preview position
   const target = event.currentTarget as HTMLElement
-  if (target) {
-    const slotKey = target.getAttribute('data-slot-key')
-    if (slotKey) {
-      dragOverSlot.value = slotKey
-    }
-  }
+  const rect = target.getBoundingClientRect()
+  const offsetY = event.clientY - rect.top
+
+  // Snap to hour boundaries
+  const minutesFromStart = Math.floor(offsetY / MINUTES_PER_PIXEL)
+  const snappedMinutes = Math.floor(minutesFromStart / 60) * 60
+  const top = snappedMinutes * MINUTES_PER_PIXEL
+
+  dragPreview.value = { date, top }
 }
 
-function handleDragLeave(event: DragEvent) {
-  // Clear preview when leaving slot
-  const target = event.currentTarget as HTMLElement
-  const relatedTarget = event.relatedTarget as HTMLElement
-
-  // Only clear if we're actually leaving the slot (not just entering a child)
-  if (!target.contains(relatedTarget)) {
-    dragOverSlot.value = null
-  }
-}
-
-function handleDrop(date: Date, hour: number, event: DragEvent) {
+function handleDrop(date: Date, event: DragEvent) {
   event.preventDefault()
-  dragOverSlot.value = null
+
   const taskId = event.dataTransfer?.getData('taskId')
-  if (taskId) {
-    emit('task-drop', taskId, date, hour)
-  }
+  if (!taskId) return
+
+  // Calculate hour from drop position
+  const target = event.currentTarget as HTMLElement
+  const rect = target.getBoundingClientRect()
+  const offsetY = event.clientY - rect.top
+  const minutesFromStart = Math.floor(offsetY / MINUTES_PER_PIXEL)
+  const hour = SCHEDULE_START_HOUR + Math.floor(minutesFromStart / 60)
+
+  emit('task-drop', taskId, date, hour)
+
+  dragPreview.value = null
   draggingTask.value = null
 }
 </script>
@@ -497,6 +590,12 @@ function handleDrop(date: Date, hour: number, event: DragEvent) {
 <style scoped lang="scss">
 @import '@/assets/styles/variables.scss';
 @import '@/assets/styles/mixins.scss';
+
+// Color constants
+$color-priority-high: #ef4444;
+$color-priority-medium: #3b82f6;
+$color-priority-low: #10b981;
+$color-aggregation: #e5e7eb;
 
 .week-schedule {
   display: flex;
@@ -534,7 +633,9 @@ function handleDrop(date: Date, hour: number, event: DragEvent) {
   background-color: white;
 }
 
+// ============================================
 // Time Column
+// ============================================
 .time-column {
   border-right: 1px solid $color-border;
   background-color: $bg-color-hover;
@@ -544,24 +645,30 @@ function handleDrop(date: Date, hour: number, event: DragEvent) {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: $font-size-xs;
-    font-weight: 600;
-    color: $color-text-secondary;
     border-bottom: 1px solid $color-border;
+
+    .all-day-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: $color-text-secondary;
+    }
   }
 
   .time-slot {
     height: 60px;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
-    font-size: $font-size-xs;
+    padding-top: 4px;
+    font-size: 12px;
     color: $color-text-tertiary;
-    border-bottom: 1px solid $color-border;
+    border-top: 1px solid $color-border;
   }
 }
 
+// ============================================
 // Day Column
+// ============================================
 .day-column {
   border-right: 1px solid $color-border;
   position: relative;
@@ -574,7 +681,7 @@ function handleDrop(date: Date, hour: number, event: DragEvent) {
     background-color: rgba($color-primary, 0.02);
 
     .day-header {
-      background-color: rgba($color-primary, 0.1);
+      background-color: rgba($color-primary, 0.05);
     }
   }
 
@@ -582,298 +689,129 @@ function handleDrop(date: Date, hour: number, event: DragEvent) {
     height: 60px;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: $spacing-xs;
     border-bottom: 1px solid $color-border;
     background-color: $bg-color-hover;
 
-    .day-name {
-      font-size: $font-size-xs;
-      color: $color-text-secondary;
-    }
+    .header-top {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: $spacing-xs;
+      padding-top: $spacing-xs;
 
-    .day-date {
-      font-size: $font-size-md;
-      font-weight: 600;
-      color: $color-text-primary;
+      .day-name {
+        font-size: 12px;
+        color: $color-text-secondary;
+      }
 
-      &.is-today-date {
-        color: white;
-        background-color: $color-primary;
-        width: 28px;
-        height: 28px;
-        border-radius: $radius-round;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+      .day-date {
+        font-size: $font-size-md;
+        font-weight: 600;
+        color: $color-text-primary;
+
+        &.is-today-date {
+          color: white;
+          background-color: $color-primary;
+          width: 24px;
+          height: 24px;
+          border-radius: $radius-round;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
       }
     }
 
-    .day-task-count {
-      font-size: $font-size-xs;
-      color: $color-text-tertiary;
+    .all-day-events {
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 $spacing-xs;
+      border-top: 1px solid $color-border;
+      overflow: hidden;
+
+      .all-day-task {
+        font-size: 10px;
+        font-weight: 500;
+        color: white;
+        padding: 2px 6px;
+        border-radius: $radius-sm;
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+
+        &.priority-high {
+          background-color: $color-priority-high;
+        }
+
+        &.priority-medium {
+          background-color: $color-priority-medium;
+        }
+
+        &.priority-low {
+          background-color: $color-priority-low;
+        }
+      }
+
+      .all-day-empty {
+        font-size: 10px;
+        color: $color-text-tertiary;
+      }
     }
   }
 
   .day-slots {
-    .time-slot {
-      height: 60px;
-      border-bottom: 1px solid $color-border;
-      position: relative;
-      cursor: pointer;
-      transition: background-color $transition-fast;
-
-      &:hover {
-        background-color: rgba($color-primary, 0.05);
-      }
-    }
-  }
-}
-
-// ============================================
-// Drag Preview
-// ============================================
-.drag-preview {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba($color-primary, 0.1);
-  border: 2px dashed $color-primary;
-  border-radius: $radius-sm;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10;
-  pointer-events: none;
-
-  .drag-preview-task {
+    position: relative;
+    height: 780px; // 13 hours × 60px
     background-color: white;
-    padding: $spacing-sm;
-    border-radius: $radius-sm;
-    box-shadow: $shadow-md;
-    max-width: 90%;
-
-    .task-title {
-      font-size: $font-size-sm;
-      font-weight: 500;
-      color: $color-text-primary;
-      margin-bottom: $spacing-xs;
-      @include text-ellipsis;
-    }
-
-    .task-project {
-      display: flex;
-      align-items: center;
-      gap: $spacing-xs;
-      font-size: $font-size-xs;
-      color: $color-text-secondary;
-
-      .project-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: $radius-round;
-      }
-    }
-  }
-}
-
-// ============================================
-// Schedule Task
-// ============================================
-.schedule-task {
-  position: absolute;
-  left: 4px;
-  right: 4px;
-  top: 2px;
-  padding: $spacing-xs $spacing-sm;
-  border-radius: $radius-sm;
-  border-left: 3px solid;
-  background-color: white;
-  box-shadow: $shadow-sm;
-  cursor: pointer;
-  transition: all $transition-fast;
-  overflow: hidden;
-  z-index: 1;
-
-  &:hover {
-    box-shadow: $shadow-md;
-    transform: translateY(-1px);
-    z-index: 2;
-  }
-
-  &.is-completed {
-    opacity: 0.6;
-    text-decoration: line-through;
-  }
-
-  // Priority colors
-  &.priority-5,
-  &.priority-4 {
-    border-color: $color-danger;
-    background-color: rgba($color-danger, 0.05);
-  }
-
-  &.priority-3,
-  &.priority-2 {
-    border-color: $color-warning;
-    background-color: rgba($color-warning, 0.05);
-  }
-
-  &.priority-1,
-  &.priority-0 {
-    border-color: $color-primary;
-    background-color: rgba($color-primary, 0.05);
-  }
-
-  .task-time {
-    font-size: $font-size-xs;
-    color: $color-text-tertiary;
-    margin-bottom: 2px;
-  }
-
-  .task-title {
-    font-size: $font-size-xs;
-    font-weight: 500;
-    color: $color-text-primary;
-    margin-bottom: 2px;
-    @include text-ellipsis;
-  }
-
-  .task-project {
-    display: flex;
-    align-items: center;
-    gap: $spacing-xs;
-    font-size: $font-size-xs;
-    color: $color-text-secondary;
-
-    .project-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: $radius-round;
-    }
-  }
-
-  // Overflow Badge
-  .task-overflow-badge {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    background-color: $color-primary;
-    color: white;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: $radius-round;
     cursor: pointer;
-    z-index: 10;
-    box-shadow: $shadow-sm;
-    transition: all $transition-fast;
 
     &:hover {
-      background-color: darken($color-primary, 10%);
-      transform: scale(1.1);
+      background-color: rgba($color-primary, 0.01);
     }
-  }
 
-  // Add visual indicator when task has overflow
-  &.has-overflow {
-    &::after {
-      content: '';
+    // Hour grid lines (background)
+    .hour-grid-line {
       position: absolute;
-      top: 0;
+      left: 0;
       right: 0;
-      width: 0;
       height: 0;
-      border-style: solid;
-      border-width: 0 20px 20px 0;
-      border-color: transparent rgba($color-primary, 0.2) transparent transparent;
-      border-top-right-radius: $radius-sm;
-    }
-  }
-}
-
-// ============================================
-// Task Overflow Popover List
-// ============================================
-.task-overflow-list {
-  .overflow-list-header {
-    font-size: $font-size-sm;
-    font-weight: 600;
-    color: $color-text-primary;
-    padding-bottom: $spacing-sm;
-    margin-bottom: $spacing-sm;
-    border-bottom: 1px solid $color-border;
-  }
-
-  .overflow-task-item {
-    padding: $spacing-sm;
-    margin-bottom: $spacing-xs;
-    border-radius: $radius-sm;
-    border-left: 3px solid;
-    background-color: $bg-color-hover;
-    cursor: pointer;
-    transition: all $transition-fast;
-
-    &:hover {
-      background-color: darken($bg-color-hover, 5%);
-      transform: translateX(2px);
+      border-top: 1px solid $color-border;
+      pointer-events: none;
+      z-index: 0;
     }
 
-    &:last-child {
-      margin-bottom: 0;
-    }
-
-    &.is-completed {
-      opacity: 0.6;
-      text-decoration: line-through;
-    }
-
-    // Priority colors
-    &.priority-5,
-    &.priority-4 {
-      border-color: $color-danger;
-      background-color: rgba($color-danger, 0.05);
-    }
-
-    &.priority-3,
-    &.priority-2 {
-      border-color: $color-warning;
-      background-color: rgba($color-warning, 0.05);
-    }
-
-    &.priority-1,
-    &.priority-0 {
-      border-color: $color-primary;
-      background-color: rgba($color-primary, 0.05);
-    }
-
-    .overflow-task-time {
-      font-size: $font-size-xs;
-      color: $color-text-tertiary;
-      margin-bottom: $spacing-xs;
-    }
-
-    .overflow-task-title {
-      font-size: $font-size-sm;
-      font-weight: 500;
-      color: $color-text-primary;
-      margin-bottom: $spacing-xs;
-    }
-
-    .overflow-task-project {
+    // Drag preview
+    .drag-preview {
+      position: absolute;
+      left: 4px;
+      right: 4px;
+      background-color: rgba($color-primary, 0.1);
+      border: 2px dashed $color-primary;
+      border-radius: $radius-sm;
       display: flex;
       align-items: center;
-      gap: $spacing-xs;
-      font-size: $font-size-xs;
-      color: $color-text-secondary;
+      justify-content: center;
+      z-index: 5;
+      pointer-events: none;
 
-      .project-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: $radius-round;
+      .drag-preview-content {
+        background-color: white;
+        padding: $spacing-xs $spacing-sm;
+        border-radius: $radius-sm;
+        font-size: 12px;
+        font-weight: 500;
+        color: $color-text-primary;
+        box-shadow: $shadow-sm;
+        max-width: 90%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
     }
   }
@@ -900,7 +838,7 @@ function handleDrop(date: Date, hour: number, event: DragEvent) {
     .task-count {
       background-color: $color-primary;
       color: white;
-      font-size: $font-size-xs;
+      font-size: 12px;
       font-weight: 600;
       padding: 2px 8px;
       border-radius: $radius-round;
