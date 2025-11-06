@@ -1,20 +1,16 @@
 <template>
-  <div
-    class="aggregation-block"
-    :class="{ 'small-block': isSmallBlock }"
-    :style="{ top: `${top}px`, height: `${height}px` }"
-  >
+  <div class="allday-aggregation">
     <!-- Display all task titles -->
     <div class="aggregation-content">
-      <div v-if="showTitles" class="all-task-titles">{{ allTaskTitles }}</div>
+      <div class="all-task-titles">{{ allTaskTitles }}</div>
     </div>
 
     <!-- Aggregation Badge with Popover -->
     <el-popover
-      placement="right"
+      placement="bottom"
       :width="300"
       trigger="hover"
-      popper-class="aggregation-popover"
+      popper-class="allday-aggregation-popover"
     >
       <template #reference>
         <div class="aggregation-badge">
@@ -22,10 +18,10 @@
         </div>
       </template>
 
-      <!-- Popover Content: List all tasks in this time slot -->
+      <!-- Popover Content: List all tasks -->
       <div class="task-list">
         <div class="task-list-header">
-          该时间段的任务 ({{ tasks.length }})
+          全天任务 ({{ tasks.length }})
         </div>
         <div
           v-for="task in sortedTasks"
@@ -34,8 +30,8 @@
           :class="getPriorityClass(task.priority)"
           @click="$emit('task-click', task)"
         >
-          <div class="task-item-time">{{ formatTaskTime(task) }}</div>
           <div class="task-item-title">{{ task.title }}</div>
+          <div class="task-item-time">{{ formatTaskTime(task) }}</div>
           <div v-if="task.project" class="task-item-project">
             <span
               class="project-dot"
@@ -69,10 +65,7 @@ interface Task {
 }
 
 interface Props {
-  top: number
-  height: number
   tasks: Task[]
-  displayTask: Task  // The highest priority task to display
 }
 
 const props = defineProps<Props>()
@@ -100,16 +93,6 @@ const allTaskTitles = computed(() => {
   return props.tasks.map(task => task.title).join('、')
 })
 
-const showTitles = computed(() => {
-  // Hide titles when height < 15px (duration < 15 minutes)
-  return props.height >= 15
-})
-
-const isSmallBlock = computed(() => {
-  // Small block when height < 10px (duration < 10 minutes)
-  return props.height < 10
-})
-
 // ============================================
 // Methods
 // ============================================
@@ -130,14 +113,18 @@ function formatTaskTime(task: Task): string {
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
   }
 
+  const formatDate = (date: Date) => {
+    return `${date.getMonth() + 1}/${date.getDate()}`
+  }
+
   // Check if cross-day
   const isCrossDay = start.getDate() !== end.getDate() ||
                      start.getMonth() !== end.getMonth() ||
                      start.getFullYear() !== end.getFullYear()
 
   if (isCrossDay) {
-    const startDate = `${start.getMonth() + 1}/${start.getDate()}`
-    const endDate = `${end.getMonth() + 1}/${end.getDate()}`
+    const startDate = formatDate(start)
+    const endDate = formatDate(end)
     return `${startDate} ${formatTime(start)} → ${endDate} ${formatTime(end)}`
   } else {
     return `${formatTime(start)}-${formatTime(end)}`
@@ -166,62 +153,48 @@ $transition-fast: 0.15s ease;
 $font-size-xs: 12px;
 $font-size-sm: 14px;
 
-.aggregation-block {
-  position: absolute;
-  left: 4px;
-  right: 4px;
+.allday-aggregation {
+  height: 100%;
+  display: flex;
+  align-items: center;
   background-color: $color-aggregation;
   border-radius: $radius-sm;
-  padding: $spacing-xs $spacing-sm;
+  padding: 2px 6px;
   cursor: pointer;
   transition: all $transition-fast;
-
-  // Vertically center content
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  position: relative;
 
   &:hover {
     background-color: darken($color-aggregation, 5%);
   }
 
-  // Small block: no padding for height < 10px
-  &.small-block {
-    padding: 0;
-    justify-content: center;
-  }
-
   .aggregation-content {
     flex: 1;
     display: flex;
-    flex-direction: column;
-    justify-content: center;
-    position: relative;
-    z-index: 1;
-    padding-right: 30px; // Make space for badge
+    align-items: center;
+    padding-right: 24px; // Make space for badge
+    overflow: hidden;
   }
 
   .all-task-titles {
     font-size: 10px;
     font-weight: 500;
     color: $color-text-primary;
-    line-height: 1.4;
     overflow: hidden;
     text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
+    white-space: nowrap;
   }
 
   .aggregation-badge {
     position: absolute;
-    top: 4px;
     right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
     background-color: $color-text-secondary;
     color: white;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 700;
-    padding: 2px 6px;
+    padding: 1px 5px;
     border-radius: $radius-round;
     cursor: pointer;
     z-index: 10;
@@ -230,7 +203,7 @@ $font-size-sm: 14px;
 
     &:hover {
       background-color: darken($color-text-secondary, 10%);
-      transform: scale(1.1);
+      transform: translateY(-50%) scale(1.1);
     }
   }
 }
@@ -282,16 +255,16 @@ $font-size-sm: 14px;
       background-color: rgba($color-priority-low, 0.05);
     }
 
-    .task-item-time {
-      font-size: $font-size-xs;
-      color: $color-text-tertiary;
-      margin-bottom: $spacing-xs;
-    }
-
     .task-item-title {
       font-size: $font-size-sm;
       font-weight: 500;
       color: $color-text-primary;
+      margin-bottom: $spacing-xs;
+    }
+
+    .task-item-time {
+      font-size: $font-size-xs;
+      color: $color-text-tertiary;
       margin-bottom: $spacing-xs;
     }
 
@@ -314,7 +287,7 @@ $font-size-sm: 14px;
 
 <style lang="scss">
 // Global popover styles (not scoped)
-.aggregation-popover {
+.allday-aggregation-popover {
   padding: 12px !important;
 }
 </style>

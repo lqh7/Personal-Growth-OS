@@ -21,9 +21,17 @@
     <div class="schedule-grid">
       <!-- Time Column -->
       <div class="time-column">
+        <!-- Date Header Row -->
         <div class="time-header">
+          <div class="date-label"></div>
+        </div>
+
+        <!-- All-day Label Row -->
+        <div class="all-day-label-row">
           <div class="all-day-label">全天</div>
         </div>
+
+        <!-- Time Slots -->
         <div
           v-for="hour in hours"
           :key="hour"
@@ -40,29 +48,33 @@
         class="day-column"
         :class="{ 'is-today': isToday(day.date) }"
       >
-        <!-- Day Header -->
+        <!-- Day Header (Date only, 45px) -->
         <div class="day-header">
-          <div class="header-top">
-            <div class="day-name">{{ day.name }}</div>
-            <div class="day-date" :class="{ 'is-today-date': isToday(day.date) }">
-              {{ day.date.getDate() }}
-            </div>
+          <div class="day-name">{{ day.name }}</div>
+          <div class="day-date" :class="{ 'is-today-date': isToday(day.date) }">
+            {{ formatDayDate(day.date) }}
           </div>
+        </div>
 
-          <!-- All-day Events Area (20px height) -->
-          <div class="all-day-events">
-            <div
-              v-for="task in day.allDayTasks"
-              :key="task.id"
-              class="all-day-task"
-              :class="getPriorityClass(task.priority)"
-              @click="handleTaskClick(task)"
-            >
-              {{ task.title }}
-            </div>
-            <div v-if="day.allDayTasks.length === 0" class="all-day-empty">
-              无全天任务
-            </div>
+        <!-- All-day Events Area (20px height, independent row) -->
+        <div class="all-day-events">
+          <!-- Single all-day task -->
+          <AllDayTaskCard
+            v-if="day.allDayTasks.length === 1"
+            :task="day.allDayTasks[0]"
+            @task-click="handleTaskClick"
+          />
+
+          <!-- Multiple all-day tasks (aggregation) -->
+          <AllDayAggregation
+            v-else-if="day.allDayTasks.length > 1"
+            :tasks="day.allDayTasks"
+            @task-click="handleTaskClick"
+          />
+
+          <!-- No all-day tasks (placeholder) -->
+          <div v-else class="all-day-empty">
+
           </div>
         </div>
 
@@ -162,6 +174,8 @@ import { ref, computed } from 'vue'
 import { ArrowLeft, ArrowRight, Clock } from '@element-plus/icons-vue'
 import TaskCard from './TaskCard.vue'
 import AggregationBlock from './AggregationBlock.vue'
+import AllDayTaskCard from './AllDayTaskCard.vue'
+import AllDayAggregation from './AllDayAggregation.vue'
 
 // ============================================
 // Types
@@ -257,8 +271,8 @@ const weekDays = computed<WeekDay[]>(() => {
     date.setDate(date.getDate() + i)
 
     const dayTasks = getTasksForDay(date)
-    const allDayTasks = dayTasks.filter(t => isAllDayTask(t))
-    const timedTasks = dayTasks.filter(t => !isAllDayTask(t))
+    const allDayTasks = dayTasks.filter(t => isAllDayTask(t, date))
+    const timedTasks = dayTasks.filter(t => !isAllDayTask(t, date))
 
     days.push({
       name: dayNames[i],
@@ -329,10 +343,10 @@ function computeRenderItems(tasks: Task[], currentDate: Date): RenderItem[] {
     events.push({ time: endMinutes, type: 'end', task })
   })
 
-  // Sort events by time, then by type (start before end)
+  // Sort events by time, then by type (end before start to avoid false overlap)
   events.sort((a, b) => {
     if (a.time !== b.time) return a.time - b.time
-    return a.type === 'start' ? -1 : 1
+    return a.type === 'end' ? -1 : 1
   })
 
   // Sweep line to detect overlapping segments
@@ -355,8 +369,9 @@ function computeRenderItems(tasks: Task[], currentDate: Date): RenderItem[] {
         const taskEnd = task.endTime ? new Date(task.endTime) : new Date(taskStart.getTime() + 60 * 60 * 1000)
 
         const scheduleStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), SCHEDULE_START_HOUR, 0, 0)
+        const scheduleEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), SCHEDULE_END_HOUR, 0, 0)
         const renderStartTime = taskStart < scheduleStart ? scheduleStart : taskStart
-        const renderEndTime = taskEnd
+        const renderEndTime = taskEnd > scheduleEnd ? scheduleEnd : taskEnd
 
         renderItems.push({
           type: 'task',
@@ -414,7 +429,10 @@ function mergeConsecutiveItems(items: RenderItem[]): RenderItem[] {
       current.top + current.height === next.top &&
       (current.type === 'task'
         ? current.task.id === (next as TaskRenderItem).task.id
-        : arraysEqual(current.tasks.map(t => t.id), (next as AggregationRenderItem).tasks.map(t => t.id)))
+        : setsEqual(
+            new Set(current.tasks.map(t => t.id)),
+            new Set((next as AggregationRenderItem).tasks.map(t => t.id))
+          ))
 
     if (canMerge) {
       // Merge: extend height
@@ -436,6 +454,14 @@ function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i++) {
     if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
+function setsEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false
+  for (const item of a) {
+    if (!b.has(item)) return false
   }
   return true
 }
@@ -468,20 +494,29 @@ function getTasksForDay(date: Date): Task[] {
   })
 }
 
-function isAllDayTask(task: Task): boolean {
-  // All-day task: has startTime but no specific hour (00:00), or explicitly marked
+function isAllDayTask(task: Task, currentDate: Date): boolean {
+  // All-day task: starts at or before 8:00 AND ends at or after 21:00 on the given date
   if (!task.startTime) return false
-  const start = new Date(task.startTime)
-  return start.getHours() === 0 && start.getMinutes() === 0 && (!task.endTime || isEndOfDay(task.endTime))
-}
 
-function isEndOfDay(date: Date): boolean {
-  const d = new Date(date)
-  return d.getHours() === 23 && d.getMinutes() === 59
+  const taskStart = new Date(task.startTime)
+  const taskEnd = task.endTime ? new Date(task.endTime) : new Date(taskStart.getTime() + 60 * 60 * 1000)
+
+  // Create day boundaries (8:00 and 21:00 of currentDate)
+  const day8am = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 8, 0, 0)
+  const day9pm = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 21, 0, 0)
+
+  // Task is all-day if it starts at or before 8:00 AND ends at or after 21:00
+  return taskStart <= day8am && taskEnd >= day9pm
 }
 
 function formatHour(hour: number): string {
   return `${hour.toString().padStart(2, '0')}:00`
+}
+
+function formatDayDate(date: Date): string {
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  return `${month}月${day}日`
 }
 
 function isToday(date: Date): boolean {
@@ -641,7 +676,20 @@ $color-aggregation: #e5e7eb;
   background-color: $bg-color-hover;
 
   .time-header {
-    height: 60px;
+    height: 45px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-bottom: 1px solid $color-border;
+
+    .date-label {
+      font-size: 10px;
+      color: $color-text-secondary;
+    }
+  }
+
+  .all-day-label-row {
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -657,9 +705,8 @@ $color-aggregation: #e5e7eb;
   .time-slot {
     height: 60px;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
-    padding-top: 4px;
     font-size: 12px;
     color: $color-text-tertiary;
     border-top: 1px solid $color-border;
@@ -683,85 +730,57 @@ $color-aggregation: #e5e7eb;
     .day-header {
       background-color: rgba($color-primary, 0.05);
     }
+
+    .all-day-events {
+      background-color: rgba($color-primary, 0.03);
+    }
   }
 
   .day-header {
-    height: 60px;
+    height: 45px;
     display: flex;
     flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
     border-bottom: 1px solid $color-border;
     background-color: $bg-color-hover;
 
-    .header-top {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: $spacing-xs;
-      padding-top: $spacing-xs;
-
-      .day-name {
-        font-size: 12px;
-        color: $color-text-secondary;
-      }
-
-      .day-date {
-        font-size: $font-size-md;
-        font-weight: 600;
-        color: $color-text-primary;
-
-        &.is-today-date {
-          color: white;
-          background-color: $color-primary;
-          width: 24px;
-          height: 24px;
-          border-radius: $radius-round;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-      }
+    .day-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: $color-text-primary;
     }
 
-    .all-day-events {
-      height: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0 $spacing-xs;
-      border-top: 1px solid $color-border;
-      overflow: hidden;
+    .day-date {
+      font-size: 12px;
+      font-weight: 400;
+      color: $color-text-secondary;
 
-      .all-day-task {
-        font-size: 10px;
-        font-weight: 500;
+      &.is-today-date {
         color: white;
-        padding: 2px 6px;
+        background-color: $color-primary;
+        padding: 2px 8px;
         border-radius: $radius-sm;
-        cursor: pointer;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 100%;
-
-        &.priority-high {
-          background-color: $color-priority-high;
-        }
-
-        &.priority-medium {
-          background-color: $color-priority-medium;
-        }
-
-        &.priority-low {
-          background-color: $color-priority-low;
-        }
+        font-weight: 500;
       }
+    }
+  }
 
-      .all-day-empty {
-        font-size: 10px;
-        color: $color-text-tertiary;
-      }
+  .all-day-events {
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 $spacing-xs;
+    border-bottom: 1px solid $color-border;
+    overflow: hidden;
+    background-color: $bg-color-hover;
+
+    .all-day-empty {
+      font-size: 10px;
+      color: transparent;
+      width: 100%;
     }
   }
 

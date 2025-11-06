@@ -128,15 +128,21 @@ curl "http://localhost:8000/api/tasks/agent/visualization"
 
 ### Database Management
 
-Database file: `personal_growth_os.db` (auto-created on first run)
+Database file: `backend/personal_growth_os.db` (auto-created on first run in backend directory)
 
 To reset database during development:
 ```bash
-# Windows:
+# Windows (from project root):
+cd backend
 if exist personal_growth_os.db del personal_growth_os.db
+cd ..
 
-# Linux/Mac:
-rm personal_growth_os.db
+# Linux/Mac (from project root):
+cd backend && rm -f personal_growth_os.db && cd ..
+
+# Or from backend directory:
+# Windows: if exist personal_growth_os.db del personal_growth_os.db
+# Linux/Mac: rm -f personal_growth_os.db
 ```
 
 ## Key Design Decisions
@@ -222,16 +228,15 @@ frontend/src/
 │   ├── NotesView.vue       # Note management
 │   └── ReviewView.vue      # Review dashboard
 ├── components/
-│   ├── tasks/
-│   │   ├── TaskList.vue    # List/Kanban rendering
-│   │   └── TaskCard.vue    # Individual task card
-│   ├── notes/
-│   │   └── NoteCard.vue
-│   ├── layout/
-│   │   ├── Sidebar.vue
-│   │   └── ChatPanel.vue   # AI assistant chat
-│   └── schedule/
-│       └── WeekSchedule.vue
+│   ├── task/               # Task-related components
+│   ├── tasks/              # Task list/Kanban components
+│   ├── note/               # Individual note components
+│   ├── notes/              # Note list components
+│   ├── layout/             # Layout components (Sidebar, etc.)
+│   ├── chat/               # AI chat components
+│   ├── schedule/           # Calendar/schedule components
+│   ├── review/             # Review dashboard components
+│   └── common/             # Shared/reusable components
 ├── stores/                 # Pinia state management
 │   ├── taskStore.ts        # Task state, CRUD operations
 │   ├── noteStore.ts        # Note state
@@ -240,11 +245,13 @@ frontend/src/
 │   └── uiStore.ts          # UI preferences (sidebar, theme)
 ├── api/
 │   └── client.ts           # Axios client with base URL
-├── composables/
+├── composables/            # Vue composables (reusable logic)
 │   ├── useKeyboardShortcuts.ts  # Global keyboard shortcuts
 │   └── useTaskAdapter.ts   # Task data transformation
-└── types/
-    └── index.ts            # TypeScript type definitions
+├── types/
+│   └── index.ts            # TypeScript type definitions
+├── utils/                  # Utility functions
+└── assets/                 # Static assets (styles, images)
 ```
 
 ## Key Architectural Patterns
@@ -407,13 +414,24 @@ try {
 
 ## Documentation
 
-All project documentation is in Chinese and located in `/doc/`:
-- `需求.md` - Requirements and feature specifications
-- `详细设计.md` - Detailed frontend/backend/database design
-- `工程架构.md` - Technical architecture and stack decisions
-- `../LANGGRAPH_ARCHITECTURE.md` - LangGraph implementation guide (English)
+Project documentation files:
+- `/doc/需求.md` - Requirements and feature specifications (Chinese)
+- `LANGGRAPH_ARCHITECTURE.md` - LangGraph implementation guide (English)
+- `README.md` - Project overview and quick start
+- `QUICKSTART.md` - Step-by-step setup guide
+- `backend/README.md` - Backend-specific documentation
+- `frontend/README.md` - Frontend-specific documentation
 
 Refer to these documents for detailed specifications when implementing features.
+
+## Quick Reference
+
+**Database location**: `backend/personal_growth_os.db`
+**Vector store**: `backend/chroma_data/` (ChromaDB)
+**Memory store**: `backend/mem0_data/` (Mem0)
+**API base URL**: `http://localhost:8000`
+**Frontend URL**: `http://localhost:5173`
+**API docs**: `http://localhost:8000/docs`
 
 ## Common Pitfalls to Avoid
 

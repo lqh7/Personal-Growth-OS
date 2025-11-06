@@ -122,32 +122,16 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
 @router.post("/", response_model=Task, status_code=201)
 def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     """Create a new task."""
-    # Debug: print received data
-    print(f"[DEBUG] Received task data:")
-    print(f"  - title: {task.title}")
-    print(f"  - start_time: {task.start_time} (type: {type(task.start_time)})")
-    print(f"  - end_time: {task.end_time} (type: {type(task.end_time)})")
-    print(f"  - status: {task.status}")
-
     created_task = crud_task.create_task(db, task)
-    print(f"[DEBUG] Task created in DB:")
-    print(f"  - id: {created_task.id}")
-    print(f"  - start_time: {created_task.start_time}")
-    print(f"  - end_time: {created_task.end_time}")
-    print(f"  - status: {created_task.status}")
 
     # Auto-calculate correct status based on current time (uses local time)
     now = datetime.now()
-    print(f"[DEBUG] Current time: {now}")
-
     correct_status = calculate_task_status(created_task, now)
-    print(f"[DEBUG] Calculated status: {correct_status} (current: {created_task.status})")
 
     if correct_status != created_task.status:
         created_task.status = correct_status
         db.commit()
         db.refresh(created_task)
-        print(f"[DEBUG] Status updated to: {created_task.status}")
 
     return created_task
 

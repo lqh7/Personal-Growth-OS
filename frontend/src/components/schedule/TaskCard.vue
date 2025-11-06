@@ -9,7 +9,7 @@
     <template #reference>
       <div
         class="task-card"
-        :class="[priorityClass, { 'truncated-top': isTruncatedTop, 'truncated-bottom': isTruncatedBottom }]"
+        :class="[priorityClass, { 'truncated-top': isTruncatedTop, 'truncated-bottom': isTruncatedBottom, 'small-card': isSmallCard }]"
         :style="cardStyle"
         @click="$emit('task-click', task)"
       >
@@ -117,6 +117,11 @@ const showTitle = computed(() => {
   return props.height >= 15
 })
 
+const isSmallCard = computed(() => {
+  // Small card when height < 10px (duration < 10 minutes)
+  return props.height < 10
+})
+
 const cardStyle = computed(() => {
   return {
     top: `${props.top}px`,
@@ -207,6 +212,12 @@ $font-size-sm: 14px;
 
   &.priority-low {
     background-color: $color-priority-low;
+  }
+
+  // Small card: no padding for height < 10px
+  &.small-card {
+    padding: 0;
+    justify-content: center;
   }
 
   // Truncation effects
