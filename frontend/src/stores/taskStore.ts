@@ -30,15 +30,47 @@ export const useTaskStore = defineStore('task', () => {
   )
 
   // Actions
-  async function fetchTasks(includeSnoozed = false) {
+  async function fetchTasks(params?: {
+    page?: number
+    pageSize?: number
+    includeSnoozed?: boolean
+  }) {
     loading.value = true
     error.value = null
 
     try {
       const response = await apiClient.get('/tasks/', {
-        params: { include_snoozed: includeSnoozed }
+        params: {
+          page: params?.page || 1,
+          page_size: params?.pageSize || 15,
+          include_snoozed: params?.includeSnoozed || false
+        }
       })
-      tasks.value = response.data
+
+      // Handle both response formats:
+      // 1. New format: { items: Task[], pagination: PaginationMeta }
+      // 2. Old format: Task[] (direct array)
+      const isNewFormat = response.data.items !== undefined
+
+      if (isNewFormat) {
+        tasks.value = response.data.items
+        return {
+          items: response.data.items,
+          pagination: response.data.pagination
+        }
+      } else {
+        // Old format - direct array
+        tasks.value = response.data
+        return {
+          items: response.data,
+          pagination: {
+            page: params?.page || 1,
+            page_size: params?.pageSize || 15,
+            total: response.data.length,
+            total_pages: 1
+          }
+        }
+      }
     } catch (e: any) {
       error.value = e.message || 'Failed to fetch tasks'
       throw e

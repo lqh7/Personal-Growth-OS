@@ -15,6 +15,42 @@ def get_task(db: Session, task_id: int) -> Optional[Task]:
     return db.query(Task).filter(Task.id == task_id).first()
 
 
+def count_tasks(
+    db: Session,
+    project_id: Optional[int] = None,
+    status: Optional[str] = None,
+    include_snoozed: bool = False
+) -> int:
+    """
+    Count total number of tasks matching the filters.
+
+    Args:
+        db: Database session
+        project_id: Filter by project ID
+        status: Filter by task status
+        include_snoozed: If False, exclude tasks with snooze_until > now
+    """
+    query = db.query(Task).filter(Task.parent_task_id.is_(None))  # Only root tasks
+
+    if project_id is not None:
+        query = query.filter(Task.project_id == project_id)
+
+    if status is not None:
+        query = query.filter(Task.status == status)
+
+    if not include_snoozed:
+        # Exclude tasks that are snoozed (snooze_until is in the future)
+        # Uses local time to match frontend timezone (前端时间为准)
+        query = query.filter(
+            or_(
+                Task.snooze_until.is_(None),
+                Task.snooze_until <= datetime.now()
+            )
+        )
+
+    return query.count()
+
+
 def get_tasks(
     db: Session,
     skip: int = 0,

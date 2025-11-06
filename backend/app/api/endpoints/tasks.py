@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.schemas.task import (
     Task, TaskCreate, TaskUpdate,
-    TaskIgnitionRequest, TaskIgnitionResponse
+    TaskIgnitionRequest, TaskIgnitionResponse,
+    TaskListResponse, PaginationMeta
 )
 from app.crud import crud_task
 # Temporarily disabled AI features until langgraph dependencies are resolved
@@ -71,28 +72,40 @@ def calculate_task_status(task, now: datetime = None) -> str:
 #     }
 
 
-@router.get("/", response_model=List[Task])
+@router.get("/", response_model=TaskListResponse)
 def list_tasks(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(15, ge=1, le=100, description="Items per page"),
     project_id: Optional[int] = None,
     status: Optional[str] = None,
     include_snoozed: bool = False,
     db: Session = Depends(get_db)
 ):
     """
-    List all tasks with optional filtering.
+    List all tasks with pagination and optional filtering.
 
-    - **skip**: Number of tasks to skip (pagination)
-    - **limit**: Maximum number of tasks to return
+    - **page**: Page number (1-indexed)
+    - **page_size**: Number of items per page (default 15)
     - **project_id**: Filter by project ID
-    - **status**: Filter by status (pending/in_progress/completed/cancelled)
+    - **status**: Filter by status (pending/in_progress/completed/overdue)
     - **include_snoozed**: Include tasks that are currently snoozed
     """
+    # Calculate offset from page number
+    skip = (page - 1) * page_size
+
+    # Get total count for pagination
+    total = crud_task.count_tasks(
+        db,
+        project_id=project_id,
+        status=status,
+        include_snoozed=include_snoozed
+    )
+
+    # Get paginated tasks
     tasks = crud_task.get_tasks(
         db,
         skip=skip,
-        limit=limit,
+        limit=page_size,
         project_id=project_id,
         status=status,
         include_snoozed=include_snoozed
@@ -107,7 +120,18 @@ def list_tasks(
             task.status = correct_status
             db.commit()
 
-    return tasks
+    # Calculate total pages
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+
+    return TaskListResponse(
+        items=tasks,
+        pagination=PaginationMeta(
+            page=page,
+            page_size=page_size,
+            total=total,
+            total_pages=total_pages
+        )
+    )
 
 
 @router.get("/{task_id}", response_model=Task)

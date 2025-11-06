@@ -63,9 +63,10 @@ class Task(Base):
         String(50),
         nullable=False,
         default="pending",
+        index=True,  # Indexed for filtering
         # CheckConstraint will be added separately for SQLite compatibility
     )
-    priority: Mapped[int] = mapped_column(Integer, default=3)  # 1=highest, 5=lowest
+    priority: Mapped[int] = mapped_column(Integer, default=3, index=True)  # 1=highest, 5=lowest (indexed for sorting)
     due_date: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     start_time: Mapped[datetime] = mapped_column(
         DateTime,
@@ -86,7 +87,7 @@ class Task(Base):
         Integer, ForeignKey("tasks.id"), nullable=True
     )
     project_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("projects.id"), nullable=True
+        Integer, ForeignKey("projects.id"), nullable=True, index=True  # Indexed for filtering
     )
     # Uses local time to match frontend timezone (前端时间为准)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

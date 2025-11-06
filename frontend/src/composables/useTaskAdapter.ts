@@ -41,7 +41,8 @@ export function useTaskAdapter() {
       priority: apiTask.priority,
       startTime: apiTask.start_time ? new Date(apiTask.start_time) : undefined,
       endTime: apiTask.end_time ? new Date(apiTask.end_time) : undefined,
-      dueDate: apiTask.due_date ? new Date(apiTask.due_date) : undefined,
+      // Use end_time as dueDate (截止时间就是结束时间)
+      dueDate: apiTask.end_time ? new Date(apiTask.end_time) : undefined,
       completed: apiTask.status === 'completed',
       project: project ? {
         id: String(project.id),

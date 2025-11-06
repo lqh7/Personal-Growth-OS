@@ -1,8 +1,9 @@
 """
 Application configuration management using Pydantic Settings.
 """
-from typing import List
+from typing import List, Union
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 from functools import lru_cache
 
 
@@ -12,7 +13,18 @@ class Settings(BaseSettings):
     # Application
     APP_NAME: str = "Personal Growth OS"
     DEBUG: bool = False
-    CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS: Union[List[str], str] = ["http://localhost:5173", "http://localhost:3000"]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """Parse CORS_ORIGINS from comma-separated string or JSON list."""
+        if isinstance(v, str):
+            # If it's a comma-separated string, split it
+            if "," in v and not v.startswith("["):
+                return [origin.strip() for origin in v.split(",")]
+            # Otherwise try to parse as JSON (will be handled by pydantic)
+        return v
 
     # LLM Configuration
     LLM_PROVIDER: str = "openai"  # openai, claude, ollama

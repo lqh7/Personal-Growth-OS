@@ -12,7 +12,7 @@ from app.core.config import settings
 engine = create_engine(
     settings.DATABASE_URL,
     connect_args={"check_same_thread": False},  # Needed for SQLite
-    echo=settings.DEBUG  # Log SQL queries in debug mode
+    echo=False  # Disabled to avoid Windows console encoding issues with Chinese characters
 )
 
 # Create session factory

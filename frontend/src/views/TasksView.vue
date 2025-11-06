@@ -133,16 +133,57 @@
 
     <!-- List View -->
     <div v-else-if="viewMode === 'list'" class="list-view">
-      <el-table :data="filteredTasks" style="width: 100%">
+      <!-- Batch Operations Toolbar (Always Visible) -->
+      <div class="batch-toolbar">
+        <span class="toolbar-info">
+          <span v-if="selectedTasks.length > 0" class="selected-count">
+            已选中 <strong>{{ selectedTasks.length }}</strong> 项
+          </span>
+          <span v-else class="toolbar-hint">批量操作</span>
+        </span>
+        <div class="toolbar-actions">
+          <el-button
+            :disabled="selectedTasks.length === 0"
+            :type="selectedTasks.length > 0 ? 'success' : ''"
+            size="small"
+            @click="handleBatchComplete"
+          >
+            <el-icon><Check /></el-icon>
+            完成
+          </el-button>
+          <el-button
+            :disabled="selectedTasks.length === 0"
+            size="small"
+            @click="handleBatchSnooze"
+          >
+            <el-icon><Clock /></el-icon>
+            延后
+          </el-button>
+          <el-button
+            :disabled="selectedTasks.length === 0"
+            type="danger"
+            size="small"
+            @click="handleBatchDelete"
+          >
+            <el-icon><Delete /></el-icon>
+            删除
+          </el-button>
+          <el-button
+            v-if="selectedTasks.length > 0"
+            text
+            size="small"
+            @click="clearSelection"
+          >
+            取消选择
+          </el-button>
+        </div>
+      </div>
+
+      <el-table :data="filteredTasks" style="width: 100%" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" />
         <el-table-column prop="title" label="任务标题" min-width="200">
           <template #default="scope">
             <div class="task-title-cell" @click="handleTaskClick(scope.row.id)">
-              <el-checkbox
-                v-model="scope.row.completed"
-                @change="handleTaskComplete(scope.row.id)"
-                @click.stop
-              />
               <span :class="{ 'task-completed': scope.row.completed }">
                 {{ scope.row.title }}
               </span>
@@ -166,11 +207,15 @@
             <el-rate v-model="scope.row.priority" disabled :max="5" size="small" />
           </template>
         </el-table-column>
-        <el-table-column prop="dueDate" label="截止时间" width="150">
+        <el-table-column prop="endTime" label="截止时间" width="150">
           <template #default="scope">
-            <span v-if="scope.row.dueDate" :class="getDueDateClass(scope.row.dueDate)">
-              {{ formatDueDate(scope.row.dueDate) }}
+            <span
+              v-if="scope.row.endTime"
+              :class="getDueDateClass(scope.row.endTime)"
+            >
+              {{ formatDueDate(scope.row.endTime) }}
             </span>
+            <span v-else class="no-due-date">-</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="200">
@@ -183,6 +228,19 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- Pagination -->
+      <div class="pagination-wrapper">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.pageSize"
+          :total="pagination.total"
+          :page-sizes="[10, 15, 20]"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handlePageChange"
+        />
+      </div>
     </div>
 
     <!-- Tree View -->
@@ -608,7 +666,8 @@ import {
   InfoFilled,
   Clock,
   Timer,
-  FolderAdd
+  FolderAdd,
+  Check
 } from '@element-plus/icons-vue'
 import TaskCard from '@/components/tasks/TaskCard.vue'
 import { useTaskStore } from '@/stores/taskStore'
@@ -667,6 +726,15 @@ const viewMode = ref<'kanban' | 'list' | 'tree'>('kanban')
 const selectedProject = ref('')
 const selectedPriority = ref('')
 const searchQuery = ref('')
+const selectedTasks = ref<ViewTask[]>([]) // 批量选择的任务列表
+let searchTimeout: number | null = null  // For debouncing search
+
+// Pagination state
+const pagination = ref({
+  page: 1,
+  pageSize: 15,
+  total: 0
+})
 
 // Sorting state for each column
 const columnSortConfig = ref<Record<string, { by: 'priority' | 'dueDate' | null; order: 'asc' | 'desc' }>>({
@@ -867,10 +935,18 @@ const tasksWithoutProject = computed(() => {
 // ============================================
 async function loadTasks() {
   try {
-    await Promise.all([
-      taskStore.fetchTasks(),
+    const [tasksResponse] = await Promise.all([
+      taskStore.fetchTasks({
+        page: pagination.value.page,
+        pageSize: pagination.value.pageSize
+      }),
       projectStore.fetchProjects()
     ])
+
+    // Update pagination metadata from response
+    if (tasksResponse && tasksResponse.pagination) {
+      pagination.value.total = tasksResponse.pagination.total
+    }
   } catch (error) {
     ElMessage.error('加载任务失败')
   }
@@ -884,8 +960,18 @@ function disablePastDates(date: Date) {
 }
 
 function handleSearch() {
-  // Mock: Debounced search
-  console.log('Searching:', searchQuery.value)
+  // Clear existing timeout
+  if (searchTimeout !== null) {
+    clearTimeout(searchTimeout)
+  }
+
+  // Set new timeout for debounced search (300ms)
+  searchTimeout = setTimeout(() => {
+    // The search is done client-side via computed filteredTasks
+    // Just reset to first page when searching
+    pagination.value.page = 1
+    searchTimeout = null
+  }, 300) as unknown as number
 }
 
 function handleQuickCreate() {
@@ -1006,7 +1092,17 @@ async function confirmSnooze(option: string) {
   }
 
   try {
-    if (currentSnoozeTaskId.value) {
+    // 批量延后模式
+    if (currentSnoozeTaskId.value === 'batch') {
+      const promises = selectedTasks.value.map(task =>
+        taskStore.snoozeTask(Number(task.id), snoozeUntil.toISOString())
+      )
+      await Promise.all(promises)
+      ElMessage.success(`成功延后 ${selectedTasks.value.length} 个任务至 ${formatDateTime(snoozeUntil)}`)
+      clearSelection()
+    }
+    // 单个任务延后模式
+    else if (currentSnoozeTaskId.value) {
       await taskStore.snoozeTask(Number(currentSnoozeTaskId.value), snoozeUntil.toISOString())
       ElMessage.success(`任务已延后至 ${formatDateTime(snoozeUntil)}`)
     }
@@ -1027,11 +1123,130 @@ async function handleTaskDelete(taskId: string) {
 
     await taskStore.deleteTask(Number(taskId))
     ElMessage.success('任务已删除')
+
+    // Smart refill after deletion
+    await handleDeleteRefill(1)
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除任务失败')
     }
   }
+}
+
+// ============================================
+// Batch Operations
+// ============================================
+function handleSelectionChange(selection: ViewTask[]) {
+  selectedTasks.value = selection
+}
+
+function clearSelection() {
+  selectedTasks.value = []
+}
+
+async function handleBatchComplete() {
+  if (selectedTasks.value.length === 0) {
+    ElMessage.warning('请先选择要操作的任务')
+    return
+  }
+
+  try {
+    const promises = selectedTasks.value.map(task =>
+      taskStore.updateTask(Number(task.id), { status: 'completed' })
+    )
+    await Promise.all(promises)
+    ElMessage.success(`成功完成 ${selectedTasks.value.length} 个任务`)
+    clearSelection()
+  } catch (error) {
+    ElMessage.error('批量完成任务失败')
+  }
+}
+
+function handleBatchSnooze() {
+  if (selectedTasks.value.length === 0) {
+    ElMessage.warning('请先选择要操作的任务')
+    return
+  }
+
+  // 使用现有的 snooze dialog，但标记为批量模式
+  currentSnoozeTaskId.value = 'batch'
+  customSnoozeDate.value = null
+  showSnoozeDialog.value = true
+}
+
+async function handleBatchDelete() {
+  if (selectedTasks.value.length === 0) {
+    ElMessage.warning('请先选择要操作的任务')
+    return
+  }
+
+  const deleteCount = selectedTasks.value.length
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${deleteCount} 个任务吗？`,
+      '批量删除确认',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    const promises = selectedTasks.value.map(task =>
+      taskStore.deleteTask(Number(task.id))
+    )
+    await Promise.all(promises)
+    ElMessage.success(`成功删除 ${deleteCount} 个任务`)
+    clearSelection()
+
+    // Smart refill after batch deletion
+    await handleDeleteRefill(deleteCount)
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('批量删除任务失败')
+    }
+  }
+}
+
+/**
+ * Smart refill strategy after deletion
+ * Automatically refills current page or navigates to previous page if empty
+ */
+async function handleDeleteRefill(deletedCount: number) {
+  const currentPageItems = filteredTasks.value.length
+  const remainingItems = currentPageItems - deletedCount
+
+  // If current page will be empty after deletion
+  if (remainingItems <= 0) {
+    // If not on first page, go to previous page
+    if (pagination.value.page > 1) {
+      pagination.value.page -= 1
+      await loadTasks()
+    } else {
+      // On first page, just reload to show whatever is left
+      await loadTasks()
+    }
+  } else {
+    // Current page still has items, reload to refill from next page
+    await loadTasks()
+  }
+}
+
+// ============================================
+// Pagination Handlers
+// ============================================
+function handlePageChange(page: number) {
+  pagination.value.page = page
+  clearSelection() // Clear selection when changing pages
+  loadTasks()
+}
+
+function handleSizeChange(pageSize: number) {
+  pagination.value.pageSize = pageSize
+  pagination.value.page = 1 // Reset to first page
+  clearSelection()
+  loadTasks()
 }
 
 function handleNoteClick(noteId: string) {
@@ -1204,6 +1419,8 @@ async function handleSaveTask() {
 
     const apiData = toApiTask(taskData)
 
+    console.log('Saving task with data:', apiData)  // Debug log
+
     if (editingTask.value) {
       // 编辑现有任务
       await taskStore.updateTask(Number(editingTask.value.id), apiData)
@@ -1216,8 +1433,11 @@ async function handleSaveTask() {
 
     showTaskDialog.value = false
     closeTaskDialog()
-  } catch (error) {
-    ElMessage.error('保存任务失败')
+    await loadTasks()  // Reload tasks to show the new/updated task
+  } catch (error: any) {
+    console.error('Task save error:', error)
+    const errorMessage = error.response?.data?.detail || error.message || '保存任务失败'
+    ElMessage.error(`保存任务失败: ${errorMessage}`)
   }
 }
 
@@ -1491,6 +1711,45 @@ onMounted(() => {
   }
 }
 
+// Batch Operations Toolbar (Always Visible)
+.batch-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-md $spacing-lg;
+  margin-bottom: $spacing-md;
+  background-color: $bg-color-hover;
+  border: 1px solid $color-border;
+  border-radius: $radius-md;
+  transition: all $transition-fast;
+
+  .toolbar-info {
+    font-size: $font-size-sm;
+    color: $color-text-secondary;
+
+    .selected-count {
+      font-size: $font-size-md;
+      color: $color-text-primary;
+
+      strong {
+        color: $color-primary;
+        font-weight: 600;
+        font-size: $font-size-lg;
+      }
+    }
+
+    .toolbar-hint {
+      font-weight: 500;
+    }
+  }
+
+  .toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+  }
+}
+
 .task-title-cell {
   display: flex;
   align-items: center;
@@ -1515,6 +1774,19 @@ onMounted(() => {
 
 .soon {
   color: $color-primary;
+}
+
+.no-due-date {
+  color: $color-text-tertiary;
+  font-size: $font-size-sm;
+}
+
+// Pagination
+.pagination-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-top: $spacing-lg;
+  padding: $spacing-md 0;
 }
 
 // ============================================

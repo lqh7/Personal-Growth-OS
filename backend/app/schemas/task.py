@@ -78,3 +78,19 @@ class TaskIgnitionResponse(BaseModel):
     subtasks: List[Task]
     minimum_viable_task: Task
     related_notes: List[dict] = []  # Simplified for MVP
+
+
+class PaginationMeta(BaseModel):
+    """Pagination metadata."""
+    page: int = Field(..., ge=1, description="Current page number")
+    page_size: int = Field(..., ge=1, le=100, description="Items per page")
+    total: int = Field(..., ge=0, description="Total number of items")
+    total_pages: int = Field(..., ge=0, description="Total number of pages")
+
+
+class TaskListResponse(BaseModel):
+    """Response schema for paginated task list."""
+    items: List[Task]
+    pagination: PaginationMeta
+
+    model_config = ConfigDict(from_attributes=False)
