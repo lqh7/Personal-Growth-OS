@@ -65,9 +65,9 @@
           </el-tag>
         </div>
         <div class="footer-right">
-          <span v-if="task.dueDate" class="due-date" :class="getDueDateClass(task.dueDate)">
+          <span v-if="task.endTime || task.startTime" class="due-date" :class="getDateClass(task.endTime || task.startTime)">
             <el-icon><Clock /></el-icon>
-            {{ formatDueDate(task.dueDate) }}
+            {{ formatTaskDate(task.endTime || task.startTime) }}
           </span>
         </div>
       </div>
@@ -95,8 +95,8 @@
               {{ task.project.name }}
             </el-tag>
             <el-rate v-model="task.priority" disabled :max="5" size="small" />
-            <span v-if="task.dueDate" class="due-date" :class="getDueDateClass(task.dueDate)">
-              {{ formatDueDate(task.dueDate) }}
+            <span v-if="task.endTime || task.startTime" class="due-date" :class="getDateClass(task.endTime || task.startTime)">
+              {{ formatTaskDate(task.endTime || task.startTime) }}
             </span>
           </div>
         </div>
@@ -189,20 +189,20 @@ function handleCommand(command: string) {
   }
 }
 
-function formatDueDate(date: Date): string {
+function formatTaskDate(date: Date): string {
   const now = new Date()
   const diff = date.getTime() - now.getTime()
   const days = Math.floor(diff / (1000 * 60 * 60 * 24))
 
   if (days === 0) return '今天'
   if (days === 1) return '明天'
-  if (days < 0) return `逾期 ${Math.abs(days)} 天`
+  if (days < 0) return `已过期 ${Math.abs(days)} 天`
   if (days <= 7) return `${days} 天后`
 
   return date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
 }
 
-function getDueDateClass(date: Date): string {
+function getDateClass(date: Date): string {
   const now = new Date()
   const diff = date.getTime() - now.getTime()
   const days = Math.floor(diff / (1000 * 60 * 60 * 24))

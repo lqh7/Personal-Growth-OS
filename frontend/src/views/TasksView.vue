@@ -52,7 +52,7 @@
           placeholder="搜索任务..."
           clearable
           @input="handleSearch"
-          style="width: 240px"
+          style="flex: 1; min-width: 150px"
         >
           <template #prefix>
             <el-icon><Search /></el-icon>
@@ -251,25 +251,50 @@
         class="project-tree-node"
       >
         <div class="project-header" @click="toggleProjectExpand(project.id)">
-          <el-icon class="expand-icon" :class="{ 'is-expanded': project.expanded }">
-            <ArrowRight />
-          </el-icon>
-          <span class="project-color-indicator" :style="{ backgroundColor: project.color }"></span>
-          <span class="project-name">{{ project.name }}</span>
-          <span class="project-task-count">{{ project.tasks.length }} 个任务</span>
-          <div class="project-stats">
-            <span class="stat pending">{{ project.stats.pending }} 待办</span>
-            <span class="stat in-progress">{{ project.stats.inProgress }} 进行中</span>
-            <span class="stat completed">{{ project.stats.completed }} 已完成</span>
+          <div class="project-header-left">
+            <el-icon class="expand-icon" :class="{ 'is-expanded': project.expanded }">
+              <ArrowRight />
+            </el-icon>
+            <span class="project-color-indicator" :style="{ backgroundColor: project.color }"></span>
+            <span class="project-name">{{ project.name }}</span>
           </div>
-          <el-button
-            size="small"
-            text
-            @click.stop="handleQuickAddToProject(project.id)"
-          >
-            <el-icon><Plus /></el-icon>
-            添加任务
-          </el-button>
+          <div class="project-header-right">
+            <div class="project-actions">
+              <el-button
+                size="small"
+                text
+                @click.stop="handleQuickAddToProject(project.id)"
+              >
+                <el-icon><Plus /></el-icon>
+                添加任务
+              </el-button>
+              <el-button
+                v-if="project.name !== '未分配任务'"
+                size="small"
+                text
+                @click.stop="handleEditProject(project.id)"
+              >
+                <el-icon><Edit /></el-icon>
+                编辑
+              </el-button>
+              <el-button
+                v-if="project.name !== '未分配任务'"
+                size="small"
+                text
+                type="danger"
+                @click.stop="handleDeleteProject(project.id)"
+              >
+                <el-icon><Delete /></el-icon>
+                删除
+              </el-button>
+            </div>
+            <span class="project-task-count">{{ project.tasks.length }} 个任务</span>
+            <div class="project-stats">
+              <span class="stat pending">{{ project.stats.pending }} 待办</span>
+              <span class="stat in-progress">{{ project.stats.inProgress }} 进行中</span>
+              <span class="stat completed">{{ project.stats.completed }} 已完成</span>
+            </div>
+          </div>
         </div>
 
         <transition name="slide-down">
@@ -755,6 +780,7 @@ const noProjectExpanded = ref(true)
 const customSnoozeDate = ref<Date | null>(null)
 const editingTask = ref<Task | null>(null)
 const editingProject = ref<any>(null)
+const projectExpandState = ref<Record<string, boolean>>({}) // 项目展开状态
 
 const igniteForm = ref({
   description: ''
@@ -904,7 +930,7 @@ const projects = computed(() => {
     name: p.name,
     color: p.color,
     description: p.description,
-    expanded: true
+    expanded: projectExpandState.value[p.id] ?? true // 从响应式状态读取
   }))
 })
 
@@ -1106,11 +1132,17 @@ async function confirmSnooze(option: string) {
       await taskStore.snoozeTask(Number(currentSnoozeTaskId.value), snoozeUntil.toISOString())
       ElMessage.success(`任务已延后至 ${formatDateTime(snoozeUntil)}`)
     }
+
+    // 重新加载任务列表（延后的任务将被过滤掉）
+    await loadTasks()
   } catch (error) {
     ElMessage.error('延后任务失败')
   }
 
+  // 关闭对话框并重置状态
   showSnoozeDialog.value = false
+  currentSnoozeTaskId.value = null
+  customSnoozeDate.value = null
 }
 
 async function handleTaskDelete(taskId: string) {
@@ -1350,10 +1382,9 @@ function toggleProjectExpand(projectId: string) {
     return
   }
 
-  const project = projects.value.find(p => p.id === projectId)
-  if (project) {
-    project.expanded = !project.expanded
-  }
+  // 修改响应式状态
+  const currentState = projectExpandState.value[projectId] ?? true
+  projectExpandState.value[projectId] = !currentState
 }
 
 function handleQuickAddToProject(projectId: string) {
@@ -1452,11 +1483,26 @@ async function handleSaveProject() {
     return
   }
 
+  // 前端校验:检查项目名称是否重复
+  const trimmedName = projectForm.value.name.trim()
+  const duplicateProject = projectStore.projects.find(p => {
+    // 编辑模式下,排除当前项目自己
+    if (editingProject.value && p.id === editingProject.value.id) {
+      return false
+    }
+    return p.name === trimmedName
+  })
+
+  if (duplicateProject) {
+    ElMessage.warning(`项目名称 "${trimmedName}" 已存在,请使用其他名称`)
+    return
+  }
+
   try {
     if (editingProject.value) {
       // 编辑现有项目
       await projectStore.updateProject(Number(editingProject.value.id), {
-        name: projectForm.value.name,
+        name: trimmedName,
         description: projectForm.value.description,
         color: projectForm.value.color
       })
@@ -1464,7 +1510,7 @@ async function handleSaveProject() {
     } else {
       // 创建新项目
       await projectStore.createProject({
-        name: projectForm.value.name,
+        name: trimmedName,
         description: projectForm.value.description,
         color: projectForm.value.color
       })
@@ -1473,8 +1519,10 @@ async function handleSaveProject() {
 
     showProjectDialog.value = false
     closeProjectDialog()
-  } catch (error) {
-    ElMessage.error('保存项目失败')
+  } catch (error: any) {
+    // 处理后端返回的错误
+    const errorMessage = error.response?.data?.detail || error.message || '保存项目失败'
+    ElMessage.error(errorMessage)
   }
 }
 
@@ -1485,6 +1533,37 @@ function closeProjectDialog() {
     name: '',
     description: '',
     color: '#667eea'
+  }
+}
+
+function handleEditProject(projectId: string) {
+  const project = projectStore.projects.find(p => String(p.id) === projectId)
+  if (project) {
+    editingProject.value = project
+    projectForm.value = {
+      name: project.name,
+      description: project.description || '',
+      color: project.color
+    }
+    showProjectDialog.value = true
+  }
+}
+
+async function handleDeleteProject(projectId: string) {
+  try {
+    await ElMessageBox.confirm('确定要删除这个项目吗?项目下的任务将移至"未分配任务"', '确认删除', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+
+    await projectStore.deleteProject(Number(projectId))
+    ElMessage.success('项目已删除')
+    await loadTasks() // 重新加载任务列表
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除项目失败')
+    }
   }
 }
 
@@ -1550,15 +1629,25 @@ onMounted(() => {
   background-color: $bg-color-card;
   border-radius: $radius-lg;
   box-shadow: $shadow-sm;
+  min-width: 0; // 允许整体收缩
 
   .filters-left {
     display: flex;
     gap: $spacing-md;
     flex: 1;
+    min-width: 0; // 允许flex收缩
+    align-items: center;
+
+    // 让下拉框和搜索框能够收缩
+    > * {
+      flex-shrink: 1;
+      min-width: 120px; // 设置最小宽度避免过度收缩
+    }
   }
 
   .filters-right {
     flex-shrink: 0;
+    margin-left: $spacing-md;
   }
 }
 
@@ -2014,7 +2103,7 @@ onMounted(() => {
   .project-header {
     display: flex;
     align-items: center;
-    gap: $spacing-md;
+    justify-content: space-between;
     padding: $spacing-lg;
     background-color: $bg-color-hover;
     cursor: pointer;
@@ -2024,10 +2113,26 @@ onMounted(() => {
       background-color: darken($bg-color-hover, 2%);
     }
 
+    .project-header-left {
+      display: flex;
+      align-items: center;
+      gap: $spacing-md;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .project-header-right {
+      display: flex;
+      align-items: center;
+      gap: $spacing-md;
+      flex-shrink: 0;
+    }
+
     .expand-icon {
       font-size: $font-size-lg;
       color: $color-text-secondary;
       transition: transform $transition-fast;
+      flex-shrink: 0;
 
       &.is-expanded {
         transform: rotate(90deg);
@@ -2038,13 +2143,16 @@ onMounted(() => {
       width: 4px;
       height: 24px;
       border-radius: $radius-sm;
+      flex-shrink: 0;
     }
 
     .project-name {
       font-size: $font-size-lg;
       font-weight: 600;
       color: $color-text-primary;
-      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .project-task-count {
@@ -2053,16 +2161,21 @@ onMounted(() => {
       padding: $spacing-xs $spacing-sm;
       background-color: white;
       border-radius: $radius-sm;
+      min-width: 80px;
+      text-align: center;
+      flex-shrink: 0;
     }
 
     .project-stats {
       display: flex;
       gap: $spacing-md;
+      flex-shrink: 0;
 
       .stat {
         font-size: $font-size-xs;
         padding: $spacing-xs $spacing-sm;
         border-radius: $radius-sm;
+        white-space: nowrap;
 
         &.pending {
           background-color: rgba($color-primary, 0.1);
@@ -2079,6 +2192,20 @@ onMounted(() => {
           color: $color-success;
         }
       }
+    }
+
+    .project-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(80px, auto));
+      gap: $spacing-xs;
+      opacity: 0;
+      transition: opacity $transition-fast;
+      width: 260px;
+      flex-shrink: 0;
+    }
+
+    &:hover .project-actions {
+      opacity: 1;
     }
   }
 

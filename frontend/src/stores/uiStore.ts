@@ -34,12 +34,12 @@ export const useUiStore = defineStore('ui', () => {
 
   /**
    * 设置Chat面板宽度百分比
-   * @param percent - 新百分比（40%-60%之间）
+   * @param percent - 新百分比（25%-70%之间）
    */
   function setChatPanelWidthPercent(percent: number) {
-    // 限制百分比范围：40%-60%
-    const minPercent = 40
-    const maxPercent = 60
+    // 限制百分比范围：25%-70%（更灵活的调整范围）
+    const minPercent = 25
+    const maxPercent = 70
     chatPanelWidthPercent.value = Math.max(minPercent, Math.min(maxPercent, percent))
   }
 

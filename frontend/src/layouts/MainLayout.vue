@@ -6,7 +6,7 @@
     <!-- 主内容区域容器（Main + Chat） -->
     <div class="content-container">
       <!-- 中间主内容区 -->
-      <main class="main-content" :style="{ width: mainContentWidthPercent + '%' }">
+      <main class="main-content" :style="{ flex: `0 0 ${mainContentWidthPercent}%` }">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -18,7 +18,7 @@
       <div class="resize-divider" @mousedown="startResize"></div>
 
       <!-- 右侧AI Chat面板 -->
-      <div class="chat-panel-container" :style="{ width: uiStore.chatPanelWidthPercent + '%' }">
+      <div class="chat-panel-container" :style="{ flex: `0 0 ${uiStore.chatPanelWidthPercent}%` }">
         <ChatPanel />
       </div>
     </div>
@@ -217,8 +217,9 @@ function startResize(e: MouseEvent) {
 
 .main-content {
   overflow-y: auto;
+  overflow-x: hidden; // 防止横向溢出
   padding: $spacing-xl;
-  min-width: 600px; // 确保主内容区最小宽度
+  min-width: 0; // 允许flex收缩
   @include custom-scrollbar;
 }
 
@@ -247,7 +248,7 @@ function startResize(e: MouseEvent) {
 }
 
 .chat-panel-container {
-  min-width: 350px; // Chat面板最小宽度
+  min-width: 0; // 允许flex收缩
   overflow: hidden;
 }
 

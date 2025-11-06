@@ -29,8 +29,43 @@ def get_projects(
     return db.query(Project).offset(skip).limit(limit).all()
 
 
+def get_project_by_name(db: Session, name: str, exclude_id: Optional[int] = None) -> Optional[Project]:
+    """
+    根据名称查询项目。
+
+    Args:
+        db: 数据库会话
+        name: 项目名称
+        exclude_id: 排除的项目ID(用于更新时排除自己)
+
+    Returns:
+        匹配的项目或None
+    """
+    query = db.query(Project).filter(Project.name == name)
+    if exclude_id is not None:
+        query = query.filter(Project.id != exclude_id)
+    return query.first()
+
+
 def create_project(db: Session, project: ProjectCreate) -> Project:
-    """Create a new project."""
+    """
+    创建新项目。
+
+    Args:
+        db: 数据库会话
+        project: 项目创建数据
+
+    Returns:
+        创建的项目
+
+    Raises:
+        ValueError: 如果项目名称已存在
+    """
+    # 检查名称是否已存在
+    existing = get_project_by_name(db, project.name)
+    if existing:
+        raise ValueError(f"项目名称 '{project.name}' 已存在")
+
     db_project = Project(**project.model_dump())
     db.add(db_project)
     db.commit()
@@ -39,12 +74,31 @@ def create_project(db: Session, project: ProjectCreate) -> Project:
 
 
 def update_project(db: Session, project_id: int, project_update: ProjectUpdate) -> Optional[Project]:
-    """Update an existing project."""
+    """
+    更新现有项目。
+
+    Args:
+        db: 数据库会话
+        project_id: 项目ID
+        project_update: 项目更新数据
+
+    Returns:
+        更新后的项目或None(如果项目不存在)
+
+    Raises:
+        ValueError: 如果新名称与其他项目重名
+    """
     db_project = get_project(db, project_id)
     if not db_project:
         return None
 
     update_data = project_update.model_dump(exclude_unset=True)
+
+    # 如果更新包含名称,检查是否与其他项目重名
+    if 'name' in update_data:
+        existing = get_project_by_name(db, update_data['name'], exclude_id=project_id)
+        if existing:
+            raise ValueError(f"项目名称 '{update_data['name']}' 已存在")
 
     for field, value in update_data.items():
         setattr(db_project, field, value)
