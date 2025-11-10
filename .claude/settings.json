@@ -1,6 +1,5 @@
 {
   "permissions": {
     "defaultMode": "bypassPermissions"
-  },
-  "model":"claude-4.5-sonnet"
+  }
 }

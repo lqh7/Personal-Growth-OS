@@ -93,6 +93,14 @@
             :style="{ top: `${(hour - 8) * 60}px` }"
           ></div>
 
+          <!-- Half-Hour Grid Lines (lighter, between full hours) -->
+          <div
+            v-for="hour in hours.slice(0, -1)"
+            :key="`half-grid-${hour}`"
+            class="half-hour-grid-line"
+            :style="{ top: `${(hour - 8) * 60 + 30}px` }"
+          ></div>
+
           <!-- Drag Preview Overlay -->
           <div
             v-if="dragPreview && dragPreview.date.toDateString() === day.date.toDateString()"
@@ -131,13 +139,21 @@
       </div>
     </div>
 
-    <!-- Floating Tasks (No Time) -->
-    <div v-if="floatingTasks.length > 0" class="floating-tasks">
+    <!-- Floating Tasks (No Time) - Always Visible -->
+    <div
+      class="floating-tasks"
+      :class="{ 'is-drag-over': isDragOverFloatingArea }"
+      @dragover.prevent="handleFloatingAreaDragOver"
+      @dragleave="handleFloatingAreaDragLeave"
+      @drop="handleFloatingAreaDrop"
+    >
       <div class="floating-tasks-header">
         <span>📋 无时间任务（拖拽到日程表可指定时间）</span>
-        <span class="task-count">{{ floatingTasks.length }}</span>
+        <span v-if="floatingTasks.length > 0" class="task-count">{{ floatingTasks.length }}</span>
       </div>
-      <div class="floating-tasks-list">
+
+      <!-- Task List (when tasks exist) -->
+      <div v-if="floatingTasks.length > 0" class="floating-tasks-list">
         <div
           v-for="task in floatingTasks"
           :key="task.id"
@@ -165,13 +181,20 @@
           </el-button>
         </div>
       </div>
+
+      <!-- Empty State (when no tasks) -->
+      <div v-else class="floating-tasks-empty">
+        <el-icon class="empty-icon"><Calendar /></el-icon>
+        <p class="empty-title">暂无待办任务</p>
+        <p class="empty-hint">将日程表上的任务拖到这里可标记为"稍后安排"</p>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ArrowLeft, ArrowRight, Clock } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Clock, Calendar } from '@element-plus/icons-vue'
 import TaskCard from './TaskCard.vue'
 import AggregationBlock from './AggregationBlock.vue'
 import AllDayTaskCard from './AllDayTaskCard.vue'
@@ -253,6 +276,7 @@ const currentWeekStart = ref(getStartOfWeek(new Date()))
 const hours = Array.from({ length: 13 }, (_, i) => i + 8) // 8:00 - 20:00
 const draggingTask = ref<Task | null>(null)
 const dragPreview = ref<DragPreview | null>(null)
+const isDragOverFloatingArea = ref(false)
 
 // Constants
 const SCHEDULE_START_HOUR = 8
@@ -594,9 +618,9 @@ function handleDragOver(event: DragEvent, date: Date) {
   const rect = target.getBoundingClientRect()
   const offsetY = event.clientY - rect.top
 
-  // Snap to hour boundaries
+  // Snap to 15-minute boundaries (more flexible than hourly)
   const minutesFromStart = Math.floor(offsetY / MINUTES_PER_PIXEL)
-  const snappedMinutes = Math.floor(minutesFromStart / 60) * 60
+  const snappedMinutes = Math.floor(minutesFromStart / 15) * 15
   const top = snappedMinutes * MINUTES_PER_PIXEL
 
   dragPreview.value = { date, top }
@@ -608,16 +632,47 @@ function handleDrop(date: Date, event: DragEvent) {
   const taskId = event.dataTransfer?.getData('taskId')
   if (!taskId) return
 
-  // Calculate hour from drop position
+  // Calculate time from drop position with 15-minute precision
   const target = event.currentTarget as HTMLElement
   const rect = target.getBoundingClientRect()
   const offsetY = event.clientY - rect.top
   const minutesFromStart = Math.floor(offsetY / MINUTES_PER_PIXEL)
-  const hour = SCHEDULE_START_HOUR + Math.floor(minutesFromStart / 60)
+  // Snap to 15-minute boundaries
+  const snappedMinutes = Math.floor(minutesFromStart / 15) * 15
+  const hour = SCHEDULE_START_HOUR + Math.floor(snappedMinutes / 60)
+  const minute = snappedMinutes % 60
 
-  emit('task-drop', taskId, date, hour)
+  emit('task-drop', taskId, date, hour, minute)
 
   dragPreview.value = null
+  draggingTask.value = null
+}
+
+// ============================================
+// Floating Area Drag Handlers
+// ============================================
+function handleFloatingAreaDragOver(event: DragEvent) {
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
+  isDragOverFloatingArea.value = true
+}
+
+function handleFloatingAreaDragLeave() {
+  isDragOverFloatingArea.value = false
+}
+
+function handleFloatingAreaDrop(event: DragEvent) {
+  event.preventDefault()
+  isDragOverFloatingArea.value = false
+
+  const taskId = event.dataTransfer?.getData('taskId')
+  if (!taskId) return
+
+  // Emit event to remove time from task (convert to floating task)
+  emit('task-drop', taskId, null as any, -1, -1) // Special signal: -1 means remove time
+
   draggingTask.value = null
 }
 </script>
@@ -689,7 +744,7 @@ $color-aggregation: #e5e7eb;
   }
 
   .all-day-label-row {
-    height: 20px;
+    height: 25px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -768,13 +823,15 @@ $color-aggregation: #e5e7eb;
   }
 
   .all-day-events {
-    height: 20px;
+    min-height: 25px;
+    max-height: 25px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0 $spacing-xs;
+    padding: $spacing-xs;
     border-bottom: 1px solid $color-border;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
     background-color: $bg-color-hover;
 
     .all-day-empty {
@@ -801,6 +858,16 @@ $color-aggregation: #e5e7eb;
       right: 0;
       height: 0;
       border-top: 1px solid $color-border;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .half-hour-grid-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 0;
+      border-top: 1px dashed rgba($color-border, 0.5);
       pointer-events: none;
       z-index: 0;
     }
@@ -844,6 +911,14 @@ $color-aggregation: #e5e7eb;
   background-color: $bg-color-hover;
   border-radius: $radius-md;
   border: 2px dashed $color-border;
+  transition: all $transition-fast;
+
+  // Drag-over feedback
+  &.is-drag-over {
+    border-color: $color-primary;
+    background-color: rgba($color-primary, 0.05);
+    box-shadow: 0 0 0 4px rgba($color-primary, 0.1);
+  }
 
   .floating-tasks-header {
     display: flex;
@@ -894,6 +969,36 @@ $color-aggregation: #e5e7eb;
         text-decoration: line-through;
         color: $color-text-tertiary;
       }
+    }
+  }
+
+  // Empty State
+  .floating-tasks-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: $spacing-xl $spacing-md;
+    text-align: center;
+
+    .empty-icon {
+      font-size: 48px;
+      color: $color-text-tertiary;
+      margin-bottom: $spacing-md;
+    }
+
+    .empty-title {
+      margin: 0 0 $spacing-xs 0;
+      font-size: $font-size-md;
+      font-weight: 500;
+      color: $color-text-secondary;
+    }
+
+    .empty-hint {
+      margin: 0;
+      font-size: $font-size-sm;
+      color: $color-text-tertiary;
+      line-height: 1.5;
     }
   }
 }

@@ -91,7 +91,7 @@ npm install
 # Run development server (with HMR)
 npm run dev
 
-# Build for production (with TypeScript check)
+# Build for production (includes TypeScript type checking via vue-tsc)
 npm run build
 
 # Preview production build
@@ -99,6 +99,27 @@ npm run preview
 
 # Frontend runs on http://localhost:5173
 ```
+
+**Note**: TypeScript errors will prevent production builds. The project uses `vue-tsc` for strict type checking. There is no separate linting command - type checking happens during build.
+
+### Running Full Stack
+
+For development, run both backend and frontend simultaneously in separate terminals:
+
+**Terminal 1 (Backend)**:
+```bash
+cd backend
+venv\Scripts\activate  # Windows
+python -m uvicorn app.main:app --reload
+```
+
+**Terminal 2 (Frontend)**:
+```bash
+cd frontend
+npm run dev
+```
+
+Then access the application at http://localhost:5173 (frontend automatically proxies API requests to http://localhost:8000).
 
 ### Testing the API
 
@@ -145,19 +166,25 @@ cd backend && rm -f personal_growth_os.db && cd ..
 # Linux/Mac: rm -f personal_growth_os.db
 ```
 
+**Note**: This project includes Windows-specific command syntax in many places. When working on Windows, use the Windows commands provided. On Linux/Mac, use the alternative commands shown.
+
 ## Key Design Decisions
 
 ### Database Schema (SQLite)
 
 Core entities with relationships:
-- `projects` - Top-level organizational containers with `color` for UI
+- `projects` - Top-level organizational containers with `color` for UI differentiation
 - `notes` - Knowledge storage with `source_url` for traceability and `content` for RAG
-- `tasks` - Action items with:
-  - `status` (pending/in_progress/completed/archived)
-  - `priority` (1-5 scale)
-  - `due_date` and optional `snooze_until` (for flexible deferral)
-  - `start_time`/`end_time` (for calendar scheduling)
-  - `estimated_hours` (for time tracking)
+- `tasks` - Action items with rich scheduling and tracking capabilities:
+  - **Status tracking**: `status` (pending/in_progress/completed/archived)
+  - **Prioritization**: `priority` (1-5 scale, indexed for efficient sorting)
+  - **Time management**:
+    - `due_date` - Task deadline
+    - `snooze_until` - Flexible deferral (postpone without guilt)
+    - `start_time` - Scheduled start time (for calendar view)
+    - `end_time` - Scheduled end time (for time-blocking)
+    - `estimated_hours` - Effort estimation (for capacity planning)
+  - **Organization**: `project_id`, `parent_task_id` (for subtasks)
 - `tags` + `note_tags` - Many-to-many relationship for knowledge organization
 - `user_profile_memories` - Isolated table for AI assistant's understanding of user preferences (with `is_active` for soft deletion)
 
@@ -168,15 +195,22 @@ Core entities with relationships:
    - Auto-retrieval of related historical notes/files from knowledge base
    - Generation of "minimum viable starting task" to reduce action friction
 
-2. **Flexible Task Deferral (灵活延后)** - PARTIAL
+2. **Calendar/Schedule View (日程管理)** - IMPLEMENTED
+   - Weekly schedule visualization with time-slot planning
+   - Tasks with `start_time`/`end_time` display on calendar grid
+   - Supports all-day tasks and time-specific tasks
+   - Frontend components: WeekSchedule, TaskCard, AllDayTaskCard, AggregationBlock
+   - Enables time-boxing and time-blocking workflows
+
+3. **Flexible Task Deferral (灵活延后)** - PARTIAL
    - `snooze_until` database field implemented
    - UI/notification system pending
 
-3. **Contextual Knowledge Resurrection (知识自动重现)** - PARTIAL
+4. **Contextual Knowledge Resurrection (知识自动重现)** - PARTIAL
    - Semantic search API implemented via ChromaDB
    - Proactive suggestion UI pending
 
-4. **Interactive Review Dashboard (可交互复盘仪表盘)** - PLANNED
+5. **Interactive Review Dashboard (可交互复盘仪表盘)** - PLANNED
    - Dual trigger: scheduled automatic + manual on-demand
    - Data-driven insight modules: task patterns, procrastination detection
    - ECharts integration ready in frontend
@@ -228,15 +262,11 @@ frontend/src/
 │   ├── NotesView.vue       # Note management
 │   └── ReviewView.vue      # Review dashboard
 ├── components/
-│   ├── task/               # Task-related components
-│   ├── tasks/              # Task list/Kanban components
-│   ├── note/               # Individual note components
-│   ├── notes/              # Note list components
-│   ├── layout/             # Layout components (Sidebar, etc.)
-│   ├── chat/               # AI chat components
-│   ├── schedule/           # Calendar/schedule components
-│   ├── review/             # Review dashboard components
-│   └── common/             # Shared/reusable components
+│   ├── tasks/              # Task list/Kanban components (TaskList, TaskCard)
+│   ├── notes/              # Note list components (NoteCard)
+│   ├── schedule/           # Calendar/schedule components (WeekSchedule, TaskCard, AllDayTaskCard, AggregationBlock, ConnectorLine)
+│   ├── layout/             # Layout components (Sidebar, ChatPanel)
+│   └── (other domain components as needed)
 ├── stores/                 # Pinia state management
 │   ├── taskStore.ts        # Task state, CRUD operations
 │   ├── noteStore.ts        # Note state
@@ -412,6 +442,24 @@ try {
 5. **Visualization**: Use `/api/tasks/agent/visualization` to debug agent flow
 6. **Testing**: Write unit tests for individual node functions before graph compilation
 
+## Testing and Quality Assurance
+
+The project includes a specialized Claude Code agent for testing:
+
+**Test Validator Agent** (`.claude/agents/test-validator.md`):
+- Automatically invoked when testing is requested
+- Validates API endpoints, frontend components, and LangGraph agents
+- Checks architectural compliance (three-layer backend, LangGraph patterns)
+- Tests both happy paths and error scenarios
+- Provides detailed PASS/FAIL reports with actionable recommendations
+
+**Manual Testing**:
+- Backend: Use API documentation at http://localhost:8000/docs for interactive testing
+- Frontend: Manual browser testing (no automated test framework currently)
+- LangGraph Agents: Use `/api/tasks/agent/visualization` to inspect agent workflows
+
+**No Formal Test Suite**: The project currently relies on manual testing and the test-validator agent. There is no pytest or vitest configuration.
+
 ## Documentation
 
 Project documentation files:
@@ -432,6 +480,19 @@ Refer to these documents for detailed specifications when implementing features.
 **API base URL**: `http://localhost:8000`
 **Frontend URL**: `http://localhost:5173`
 **API docs**: `http://localhost:8000/docs`
+
+## Environment Configuration
+
+The `.claude/settings.json` file is configured with:
+```json
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  }
+}
+```
+
+This allows Claude Code to execute commands and make file changes without requesting permission for each action, enabling faster development workflows.
 
 ## Common Pitfalls to Avoid
 

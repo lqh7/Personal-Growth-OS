@@ -23,37 +23,47 @@ router = APIRouter()
 def calculate_task_status(task, now: datetime = None) -> str:
     """
     Calculate the correct status for a task based on current time and task times.
-    Priority: completed > overdue > in_progress > pending
 
-    Note: Uses local time to match frontend's timezone (前端时间为准)
+    Status Priority (from highest to lowest):
+    1. completed - User marked as done (never auto-update)
+    2. overdue - User manually marked (never auto-set, preserved from DB)
+    3. archived - User archived (never auto-update)
+    4. in_progress - Auto-calculated: start_time <= now < end_time
+    5. pending - Auto-calculated: now < start_time OR no time set
+
+    Note: We do NOT automatically set 'overdue'. This prevents confusion when users
+    create tasks with past times or when tasks expire. Users should manually mark
+    tasks as overdue if needed.
+
+    Uses local time to match frontend's timezone (前端时间为准)
     """
     if now is None:
         now = datetime.now()
 
-    # Priority 1: completed - never auto-update
-    if task.status == 'completed':
-        return 'completed'
+    # Priority 1: Never auto-change these user-controlled statuses
+    if task.status in ['completed', 'overdue', 'archived']:
+        return task.status
 
-    # Priority 2: overdue - now >= end_time
-    if task.end_time and now >= task.end_time:
-        return 'overdue'
-
-    # Priority 3: in_progress - start_time <= now < end_time
+    # Priority 2: Auto-calculate in_progress
+    # Task is in progress if: start_time <= now < end_time
     if task.start_time and now >= task.start_time:
         if task.end_time:
-            # Has end_time: check if now < end_time
+            # Has end_time: check if not yet expired
             if now < task.end_time:
                 return 'in_progress'
+            # If now >= end_time, keep current status (don't auto-set overdue)
+            # User should manually mark as completed or overdue
         else:
-            # No end_time: just check started
+            # No end_time: assume in progress once started
             return 'in_progress'
 
-    # Priority 4: pending - now < start_time
+    # Priority 3: Auto-calculate pending
+    # Task is pending if: now < start_time OR no start_time
     if task.start_time and now < task.start_time:
         return 'pending'
 
-    # Default: return current status
-    return task.status
+    # Default: return current status (for tasks without times)
+    return task.status if task.status else 'pending'
 
 
 # Temporarily disabled - requires langgraph dependency

@@ -1,9 +1,11 @@
 """
 FastAPI application entry point.
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+import json
 
 from app.core.config import settings
 from app.db.database import init_db
@@ -25,13 +27,35 @@ async def lifespan(app: FastAPI):
     print("Shutting down Personal Growth OS...")
 
 
+# Custom JSONResponse with explicit UTF-8 encoding
+class UTF8JSONResponse(JSONResponse):
+    """JSONResponse that ensures UTF-8 encoding for Chinese characters."""
+    def render(self, content: any) -> bytes:
+        return json.dumps(
+            content,
+            ensure_ascii=False,  # Critical: Don't escape non-ASCII characters
+            allow_nan=True,
+            indent=None,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
 # Create FastAPI application
 app = FastAPI(
     title=settings.APP_NAME,
     description="Personal Growth OS - Your Second Brain for Accelerated Growth",
     version="0.1.0 (MVP)",
     lifespan=lifespan,
+    default_response_class=UTF8JSONResponse,  # Use custom UTF-8 response
 )
+
+# Middleware to ensure UTF-8 response headers
+@app.middleware("http")
+async def add_utf8_header(request: Request, call_next):
+    """Add UTF-8 content-type header to all JSON responses."""
+    response = await call_next(request)
+    if "application/json" in response.headers.get("content-type", ""):
+        response.headers["content-type"] = "application/json; charset=utf-8"
+    return response
 
 # Configure CORS
 app.add_middleware(

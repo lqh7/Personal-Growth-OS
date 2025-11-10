@@ -8,11 +8,16 @@ from typing import Generator
 
 from app.core.config import settings
 
-# Create SQLite engine
+# Create SQLite engine with UTF-8 encoding support
 engine = create_engine(
     settings.DATABASE_URL,
-    connect_args={"check_same_thread": False},  # Needed for SQLite
-    echo=False  # Disabled to avoid Windows console encoding issues with Chinese characters
+    connect_args={
+        "check_same_thread": False,  # Needed for SQLite
+        "timeout": 30,  # Increase timeout for better concurrency
+    },
+    echo=False,  # Disabled to avoid Windows console encoding issues with Chinese characters
+    pool_pre_ping=True,  # Enable connection health checks
+    # Note: SQLite uses UTF-8 by default, but we ensure JSON response encoding in FastAPI
 )
 
 # Create session factory

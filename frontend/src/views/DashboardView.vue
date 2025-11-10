@@ -380,30 +380,36 @@ function handleDragStart(task: FloatingTask, event: DragEvent) {
   }
 }
 
-async function handleTaskDrop(taskId: string, date: Date, hour: number) {
+async function handleTaskDrop(taskId: string, date: Date | null, hour: number, minute: number = 0) {
   try {
-    // Create start time with correct date and hour
+    // Special case: hour === -1 means drop to floating area (remove time)
+    if (hour === -1 || date === null) {
+      // Remove time from task (convert to floating/待办 task)
+      await taskStore.updateTask(Number(taskId), {
+        start_time: null,
+        end_time: null
+      })
+      ElMessage.success('任务已移至待办列表')
+      await loadTasks()
+      return
+    }
+
+    // Normal case: Add time to task (floating → schedule)
+    // Create start time with correct date, hour, and minute
     // IMPORTANT: Use date's year/month/day to avoid date jumping bug
     const startTime = new Date(
       date.getFullYear(),
       date.getMonth(),
       date.getDate(),
       hour,
-      0,
+      minute,
       0,
       0
     )
 
     // Set end time (default to 1 hour after start)
-    const endTime = new Date(
-      date.getFullYear(),
-      date.getMonth(),
-      date.getDate(),
-      hour + 1,
-      0,
-      0,
-      0
-    )
+    const endTime = new Date(startTime)
+    endTime.setHours(endTime.getHours() + 1)
 
     // Update task: set start_time, end_time, and clear snooze
     await taskStore.updateTask(Number(taskId), {
@@ -412,7 +418,8 @@ async function handleTaskDrop(taskId: string, date: Date, hour: number) {
       snooze_until: null
     })
 
-    ElMessage.success(`任务已安排到 ${date.toLocaleDateString('zh-CN')} ${hour}:00`)
+    const timeStr = minute > 0 ? `${hour}:${minute.toString().padStart(2, '0')}` : `${hour}:00`
+    ElMessage.success(`任务已安排到 ${date.toLocaleDateString('zh-CN')} ${timeStr}`)
     await loadTasks() // Reload tasks to reflect changes
   } catch (error) {
     ElMessage.error('更新任务时间失败')

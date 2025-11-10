@@ -1,11 +1,24 @@
 {
   "permissions": {
     "allow": [
-      "Bash(curl -s \"http://localhost:8000/api/tasks/?page=1&page_size=3\")",
-      "Bash(git pull origin main)",
-      "Bash(git stash pop)",
-      "Bash(git add .claude/settings.local.json)",
-      "Bash(git commit -m \"Update permissions: allow git pull and stash pop\")"
+      "Bash(python check_encoding.py)",
+      "Bash(timeout /t 3)",
+      "Bash(nul)",
+      "Bash(curl -s http://localhost:8000/api/tasks/)",
+      "Bash(python -c \"import sys, json; data = json.load(sys.stdin); print(''''Total tasks:'''', data[''''pagination''''][''''total'''']); print(''''First task:'''', data[''''items''''][0][''''title''''] if data[''''items''''] else ''''No tasks'''')\")",
+      "Bash(python -c \"import sys, json; data = json.load(sys.stdin); floating = [t for t in data[''''items''''] if t[''''start_time''''] is None]; print(f''''Floating tasks: {len(floating)}''''); [print(f\"\"  - ID {t[''''id'''']}: {t[''''title'''']}\"\") for t in floating[:5]]\")",
+      "Bash(curl -X POST http://localhost:8000/api/tasks/ -H \"Content-Type: application/json; charset=utf-8\" -d \"{\"\"title\"\":\"\"测试中文浮动任务\"\",\"\"description\"\":\"\"这是一个测试\"\",\"\"project_id\"\":1,\"\"priority\"\":3}\" -s)",
+      "Bash(python -c \"import sys, json; data = json.load(sys.stdin); print(f\"\"Created task ID {data[''''id'''']}: {data[''''title'''']} - {data[''''description'''']}\"\")\")",
+      "Bash(curl -X POST http://localhost:8000/api/tasks/ -H \"Content-Type: application/json; charset=utf-8\" -d \"{\"\"title\"\":\"\"NewTestTask测试\"\",\"\"description\"\":\"\"测试描述\"\",\"\"project_id\"\":1,\"\"priority\"\":3}\" -s -o C:Usersext_bc_it_sleephDesktopPersonal-Growth-OStest_response.json)",
+      "Bash(if exist personal_growth_os.db del personal_growth_os.db)",
+      "Bash(del personal_growth_os.db)",
+      "Bash(python clear_tasks.py)",
+      "Bash(python -c \"import sys, json; data = json.load(sys.stdin); print(f''''Total tasks: {data[\"\"pagination\"\"][\"\"total\"\"]}'''')\")",
+      "Bash(curl -X POST \"http://localhost:8000/api/tasks/\" -H \"Content-Type: application/json\" -d '{\"\"\"\"title\"\"\"\":\"\"\"\"测试中文浮动任务\"\"\"\",\"\"\"\"description\"\"\"\":\"\"\"\"这是一个测试描述\"\"\"\",\"\"\"\"project_id\"\"\"\":1,\"\"\"\"priority\"\"\"\":3}' -s)",
+      "Bash(python -c \"import sys, json; data = json.load(sys.stdin); print(f''''Created task ID {data[\"\"id\"\"]}''''); print(f''''Title: {data[\"\"title\"\"]}''''); print(f''''Description: {data[\"\"description\"\"]}'''')\")",
+      "Bash(git log -1 --format='%an %ae')",
+      "Bash(git add backend/app/main.py backend/app/api/endpoints/tasks.py backend/app/db/database.py frontend/src/views/TasksView.vue frontend/src/components/schedule/WeekSchedule.vue frontend/src/components/schedule/TaskCard.vue frontend/src/views/DashboardView.vue doc/*.md .claude/settings.local.json CLAUDE.md backend/clear_tasks.py backend/check_encoding.py)",
+      "Bash(git add -u)"
     ],
     "deny": [],
     "ask": []
