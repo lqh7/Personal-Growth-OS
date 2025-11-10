@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(curl -s \"http://localhost:8000/api/tasks/?page=1&page_size=3\")"
+      "Bash(curl -s \"http://localhost:8000/api/tasks/?page=1&page_size=3\")",
+      "Bash(git pull origin main)",
+      "Bash(git stash pop)",
+      "Bash(git add .claude/settings.local.json)",
+      "Bash(git commit -m \"Update permissions: allow git pull and stash pop\")"
     ],
     "deny": [],
     "ask": []
