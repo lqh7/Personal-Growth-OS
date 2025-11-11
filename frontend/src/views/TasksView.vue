@@ -615,8 +615,34 @@
     </el-dialog>
 
     <!-- Snooze Dialog -->
-    <el-dialog v-model="showSnoozeDialog" title="延后任务" width="460px">
+    <el-dialog v-model="showSnoozeDialog" title="延后任务" width="520px">
       <div class="snooze-options">
+        <!-- 延后模式选择 (仅当任务有时间时显示) -->
+        <div v-if="currentSnoozeTask?.startTime || currentSnoozeTask?.endTime" class="snooze-mode-selector">
+          <div class="mode-label">延后方式：</div>
+          <el-radio-group v-model="snoozeMode" size="small">
+            <el-radio label="start">延后开始时间</el-radio>
+            <el-radio label="end">延后结束时间</el-radio>
+          </el-radio-group>
+          <div class="mode-hint">
+            <span v-if="snoozeMode === 'start'">📌 开始和结束时间一起后移，任务时长不变</span>
+            <span v-else>📌 只延长结束时间，任务时长会延长</span>
+          </div>
+        </div>
+
+        <!-- 时长选择 (仅当浮动任务时显示) -->
+        <div v-if="!currentSnoozeTask?.startTime && !currentSnoozeTask?.endTime" class="duration-selector">
+          <div class="duration-label">任务时长：</div>
+          <el-radio-group v-model="snoozeDuration" size="small">
+            <el-radio :label="0.5">30分钟</el-radio>
+            <el-radio :label="1">1小时</el-radio>
+            <el-radio :label="2">2小时</el-radio>
+            <el-radio :label="3">3小时</el-radio>
+          </el-radio-group>
+        </div>
+
+        <el-divider>快速选择延后时间</el-divider>
+
         <div class="snooze-options-grid">
           <div
             v-for="option in snoozeOptions"
@@ -637,6 +663,49 @@
           placeholder="选择自定义时间"
           style="width: 100%"
         />
+
+        <!-- 延后结果预览 -->
+        <div v-if="customSnoozeDate && currentSnoozeTask" class="snooze-preview">
+          <div class="preview-title">📅 延后结果预览：</div>
+          <div class="preview-content">
+            <div v-if="!currentSnoozeTask.startTime && !currentSnoozeTask.endTime">
+              <!-- 浮动任务 -->
+              <div class="preview-row">
+                开始：<span class="time-new">{{ formatDateTime(customSnoozeDate) }}</span>
+              </div>
+              <div class="preview-row">
+                结束：<span class="time-new">{{ formatDateTime(calculateNewEndTime()) }}</span>
+              </div>
+              <div class="preview-row">
+                时长：<span class="time-new">{{ snoozeDuration }}小时</span>
+              </div>
+            </div>
+            <div v-else-if="snoozeMode === 'start'">
+              <!-- 延后开始时间 -->
+              <div class="preview-row">
+                开始：<span class="time-old">{{ formatDateTime(currentSnoozeTask.startTime) }}</span>
+                <span class="arrow">→</span>
+                <span class="time-new">{{ formatDateTime(customSnoozeDate) }}</span>
+              </div>
+              <div class="preview-row">
+                结束：<span class="time-old">{{ formatDateTime(currentSnoozeTask.endTime) }}</span>
+                <span class="arrow">→</span>
+                <span class="time-new">{{ formatDateTime(calculateNewEndTime()) }}</span>
+              </div>
+            </div>
+            <div v-else>
+              <!-- 延后结束时间 -->
+              <div class="preview-row">
+                开始：<span class="time-unchanged">{{ formatDateTime(currentSnoozeTask.startTime) }} (不变)</span>
+              </div>
+              <div class="preview-row">
+                结束：<span class="time-old">{{ formatDateTime(currentSnoozeTask.endTime) }}</span>
+                <span class="arrow">→</span>
+                <span class="time-new">{{ formatDateTime(customSnoozeDate) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       <template #footer>
         <el-button @click="showSnoozeDialog = false">取消</el-button>
@@ -833,6 +902,9 @@ const inProgressExpanded = ref(true) // 进行中任务折叠状态
 const overdueExpanded = ref(true) // 逾期任务折叠状态
 const completedExpanded = ref(true) // 已完成任务折叠状态
 const customSnoozeDate = ref<Date | null>(null)
+const snoozeMode = ref<'start' | 'end'>('start') // 延后模式：开始时间或结束时间
+const snoozeDuration = ref<number>(1) // 浮动任务时长（小时）
+const currentSnoozeTask = ref<ViewTask | null>(null) // 当前要延后的任务
 const editingTask = ref<Task | null>(null)
 const editingProject = ref<any>(null)
 const projectExpandState = ref<Record<string, boolean>>({}) // 项目展开状态
@@ -1189,6 +1261,16 @@ async function handleTaskComplete(taskId: string) {
 function handleTaskSnooze(taskId: string) {
   currentSnoozeTaskId.value = taskId
   customSnoozeDate.value = null
+
+  // 获取当前任务信息
+  currentSnoozeTask.value = allTasks.value.find(t => t.id === taskId) || null
+
+  // 智能默认值
+  if (currentSnoozeTask.value?.startTime && currentSnoozeTask.value?.endTime) {
+    snoozeMode.value = 'start'  // 有时间任务默认延后开始时间（保持时长）
+  }
+  snoozeDuration.value = 1  // 浮动任务默认1小时
+
   showSnoozeDialog.value = true
 }
 
@@ -1202,23 +1284,44 @@ async function confirmSnooze(option: string) {
     snoozeUntil = calculateSnoozeTime(option)
   }
 
+  // Validate that snooze time is not in the past
+  const now = new Date()
+  if (snoozeUntil < now) {
+    ElMessage.warning('延后时间不能早于当前时间')
+    return
+  }
+
   try {
+    const task = currentSnoozeTask.value
+    const isFloating = !task?.startTime && !task?.endTime
+
     // 批量延后模式
     if (currentSnoozeTaskId.value === 'batch') {
-      const promises = selectedTasks.value.map(task =>
-        taskStore.snoozeTask(Number(task.id), snoozeUntil.toISOString())
-      )
+      const promises = selectedTasks.value.map(batchTask => {
+        const isBatchFloating = !batchTask.startTime && !batchTask.endTime
+        return taskStore.snoozeTask(
+          Number(batchTask.id),
+          formatLocalDateTime(snoozeUntil),
+          snoozeMode.value,
+          isBatchFloating ? snoozeDuration.value : undefined
+        )
+      })
       await Promise.all(promises)
       ElMessage.success(`成功延后 ${selectedTasks.value.length} 个任务至 ${formatDateTime(snoozeUntil)}`)
       clearSelection()
     }
     // 单个任务延后模式
     else if (currentSnoozeTaskId.value) {
-      await taskStore.snoozeTask(Number(currentSnoozeTaskId.value), snoozeUntil.toISOString())
+      await taskStore.snoozeTask(
+        Number(currentSnoozeTaskId.value),
+        formatLocalDateTime(snoozeUntil),
+        snoozeMode.value,
+        isFloating ? snoozeDuration.value : undefined
+      )
       ElMessage.success(`任务已延后至 ${formatDateTime(snoozeUntil)}`)
     }
 
-    // 重新加载任务列表（延后的任务将被过滤掉）
+    // 重新加载任务列表
     await loadTasks()
   } catch (error) {
     ElMessage.error('延后任务失败')
@@ -1413,12 +1516,53 @@ function calculateSnoozeTime(option: string): Date {
   }
 }
 
+// 计算延后后的结束时间（用于预览）
+function calculateNewEndTime(): Date | null {
+  if (!customSnoozeDate.value || !currentSnoozeTask.value) return null
+
+  const task = currentSnoozeTask.value
+  const snoozeUntil = customSnoozeDate.value
+
+  // 浮动任务：开始时间 + 用户选择的时长
+  if (!task.startTime && !task.endTime) {
+    const endTime = new Date(snoozeUntil)
+    endTime.setHours(endTime.getHours() + snoozeDuration.value)
+    return endTime
+  }
+
+  // 延后开始时间模式：计算原时长，保持时长不变
+  if (snoozeMode.value === 'start' && task.startTime && task.endTime) {
+    const originalStart = new Date(task.startTime)
+    const originalEnd = new Date(task.endTime)
+    const duration = originalEnd.getTime() - originalStart.getTime()
+    return new Date(snoozeUntil.getTime() + duration)
+  }
+
+  // 延后结束时间模式：结束时间就是用户选择的时间
+  if (snoozeMode.value === 'end') {
+    return snoozeUntil
+  }
+
+  return null
+}
+
 function formatSnoozeHint(amount: number, unit: string): string {
   const time = new Date()
   if (unit === 'hours') {
     time.setHours(time.getHours() + amount)
   }
   return time.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function formatLocalDateTime(date: Date): string {
+  // 将Date对象转换为本地时间字符串（不进行UTC转换）
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
 }
 
 function formatDateTime(date: Date): string {
@@ -2295,11 +2439,74 @@ onMounted(() => {
 // Snooze Dialog
 // ============================================
 .snooze-options {
+  .snooze-mode-selector,
+  .duration-selector {
+    margin-bottom: $spacing-lg;
+    padding: $spacing-md;
+    background-color: #f8f9fa;
+    border-radius: $radius-md;
+
+    .mode-label,
+    .duration-label {
+      font-size: $font-size-sm;
+      font-weight: 500;
+      color: $color-text-secondary;
+      margin-bottom: $spacing-sm;
+    }
+
+    .mode-hint {
+      margin-top: $spacing-sm;
+      font-size: $font-size-xs;
+      color: $color-text-secondary;
+    }
+  }
+
   .snooze-options-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: $spacing-sm;
     margin-bottom: $spacing-md;
+  }
+
+  .snooze-preview {
+    margin-top: $spacing-md;
+    padding: $spacing-md;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: $radius-md;
+    color: white;
+
+    .preview-title {
+      font-weight: 600;
+      margin-bottom: $spacing-sm;
+      font-size: $font-size-md;
+    }
+
+    .preview-content {
+      .preview-row {
+        margin-bottom: $spacing-xs;
+        font-size: $font-size-sm;
+        line-height: 1.6;
+
+        .time-old {
+          color: rgba(255, 255, 255, 0.7);
+          text-decoration: line-through;
+        }
+
+        .time-new {
+          color: #ffd700;
+          font-weight: 600;
+        }
+
+        .time-unchanged {
+          color: rgba(255, 255, 255, 0.85);
+        }
+
+        .arrow {
+          margin: 0 $spacing-xs;
+          color: rgba(255, 255, 255, 0.9);
+        }
+      }
+    }
   }
 }
 

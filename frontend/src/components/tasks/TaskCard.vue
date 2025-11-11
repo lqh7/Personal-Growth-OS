@@ -48,6 +48,11 @@
         <h4 class="card-title" :class="{ completed: task.completed }">
           {{ task.title }}
         </h4>
+        <!-- 延后标签 -->
+        <el-tag v-if="task.snoozeUntil" size="small" type="warning" class="snooze-tag">
+          <el-icon><Clock /></el-icon>
+          已延后至 {{ formatSnoozeDate(task.snoozeUntil) }}
+        </el-tag>
         <p v-if="task.description" class="card-description">
           {{ task.description }}
         </p>
@@ -148,6 +153,9 @@ interface Task {
   status: string
   priority: number
   dueDate?: Date
+  startTime?: Date
+  endTime?: Date
+  snoozeUntil?: Date
   completed: boolean
   project?: {
     id: string
@@ -217,6 +225,18 @@ function getPriorityColor(priority: number): string {
   if (priority >= 4) return '#f56c6c' // High - Red
   if (priority >= 2) return '#e6a23c' // Medium - Orange
   return '#909399' // Low - Gray
+}
+
+function formatSnoozeDate(date: Date): string {
+  const now = new Date()
+  const diff = date.getTime() - now.getTime()
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+  const days = Math.floor(hours / 24)
+
+  if (days > 1) return `${days}天后`
+  if (days === 1) return '明天'
+  if (hours > 0) return `${hours}小时后`
+  return '即将开始'
 }
 </script>
 
@@ -297,6 +317,19 @@ function getPriorityColor(priority: number): string {
       margin: 0;
       line-height: 1.5;
       @include text-ellipsis-multiline(2);
+    }
+
+    .snooze-tag {
+      margin-top: $spacing-xs;
+      margin-bottom: $spacing-xs;
+      font-size: $font-size-xs;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+
+      .el-icon {
+        font-size: 12px;
+      }
     }
   }
 

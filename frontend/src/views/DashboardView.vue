@@ -273,9 +273,14 @@ const calendarTasks = computed(() => {
     .filter(task => {
       // Exclude completed tasks
       if (task.status === 'completed') return false
-      // Exclude snoozed tasks (they appear in floating tasks)
-      if (task.snooze_until && new Date(task.snooze_until) > now) return false
-      // Include ALL active tasks (with or without start_time)
+
+      // Exclude snoozed tasks WITHOUT time (they appear in floating tasks)
+      // Include snoozed tasks WITH time (they should appear in calendar)
+      if (task.snooze_until && new Date(task.snooze_until) > now && !task.start_time) {
+        return false
+      }
+
+      // Include ALL other active tasks (with or without start_time)
       return true
     })
     .map(task => toViewTask(task))
