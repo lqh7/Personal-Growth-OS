@@ -51,21 +51,22 @@ def init_db() -> None:
     from app.db import models  # Import models to register them
     Base.metadata.create_all(bind=engine)
 
-    # Create default "Unassigned Tasks" project if it doesn't exist
+    # Create default "Default" project if it doesn't exist
     db = SessionLocal()
     try:
         existing_project = db.query(models.Project).filter(
-            models.Project.name == "未分配任务"
+            models.Project.name == "默认"
         ).first()
 
         if not existing_project:
             default_project = models.Project(
-                name="未分配任务",
+                name="默认",
                 description="默认项目，用于存放未分类的任务",
-                color="#999999"
+                color="#999999",
+                is_system=True  # Mark as system project - cannot be deleted or edited
             )
             db.add(default_project)
             db.commit()
-            print("Created default 'Unassigned Tasks' project")
+            print("Created default 'Default' project")
     finally:
         db.close()

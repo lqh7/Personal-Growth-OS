@@ -38,6 +38,11 @@ class Project(Base):
         default="#667eea",
         comment="Project color identifier (hex color code)"
     )
+    is_system: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        comment="System project flag - cannot be deleted or renamed"
+    )
     # Uses local time to match frontend timezone (前端时间为准)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
@@ -95,6 +100,11 @@ class Task(Base):
         DateTime, default=datetime.now, onupdate=datetime.now
     )
     completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    completion_notes: Mapped[str] = mapped_column(
+        Text,
+        nullable=True,
+        comment="User's reflection notes when completing the task"
+    )
 
     # Relationships
     project: Mapped["Project"] = relationship("Project", back_populates="tasks")

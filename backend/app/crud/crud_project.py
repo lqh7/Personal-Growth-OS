@@ -86,13 +86,17 @@ def update_project(db: Session, project_id: int, project_update: ProjectUpdate) 
         更新后的项目或None(如果项目不存在)
 
     Raises:
-        ValueError: 如果新名称与其他项目重名
+        ValueError: 如果新名称与其他项目重名，或尝试修改系统项目名称
     """
     db_project = get_project(db, project_id)
     if not db_project:
         return None
 
     update_data = project_update.model_dump(exclude_unset=True)
+
+    # 系统项目保护：不允许修改名称
+    if db_project.is_system and 'name' in update_data:
+        raise ValueError("系统项目名称不可修改")
 
     # 如果更新包含名称,检查是否与其他项目重名
     if 'name' in update_data:
@@ -109,10 +113,34 @@ def update_project(db: Session, project_id: int, project_update: ProjectUpdate) 
 
 
 def delete_project(db: Session, project_id: int) -> bool:
-    """Delete a project."""
+    """
+    删除项目，并将该项目下的任务迁移到默认项目。
+
+    Args:
+        db: 数据库会话
+        project_id: 项目ID
+
+    Returns:
+        True if successful, False if project not found
+
+    Raises:
+        ValueError: 如果尝试删除系统项目
+    """
+    from app.db.models import Task  # 导入Task模型
+
     db_project = get_project(db, project_id)
     if not db_project:
         return False
+
+    # 系统项目保护：不允许删除
+    if db_project.is_system:
+        raise ValueError("系统项目不可删除")
+
+    # 将该项目下的所有任务迁移到默认项目（ID=1）
+    db.query(Task).filter(Task.project_id == project_id).update(
+        {"project_id": 1},
+        synchronize_session=False
+    )
 
     db.delete(db_project)
     db.commit()

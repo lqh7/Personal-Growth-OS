@@ -75,7 +75,16 @@ def update_project(
 
 @router.delete("/{project_id}", status_code=204)
 def delete_project(project_id: int, db: Session = Depends(get_db)):
-    """Delete a project."""
-    success = crud_project.delete_project(db, project_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Project not found")
+    """
+    删除项目。
+
+    Raises:
+        HTTPException 404: 如果项目不存在
+        HTTPException 403: 如果尝试删除系统项目
+    """
+    try:
+        success = crud_project.delete_project(db, project_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Project not found")
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))

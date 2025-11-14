@@ -525,11 +525,20 @@ The backend uses a custom `UTF8JSONResponse` class and middleware to ensure prop
 - This resolves issues with Chinese task titles, descriptions, and project names
 
 ### Task Time Management
-- **Floating tasks** (no `start_time`): Display in collapsible floating column on Kanban
+- **Unassigned tasks** (no `start_time`): Tasks are "未安排" (unassigned), displayed in dedicated status node at top of project tree
 - **Scheduled tasks** (`start_time` + `end_time`): Display on weekly schedule with minute precision
 - **Snoozed tasks** (`snooze_until`): Hidden until snooze expires, then reappear
 - **All-day events**: Tasks spanning 8:00-21:00 viewport display in dedicated all-day row
 - Time editing is done through task edit dialog (drag-and-drop removed as of 2025-11-13)
+
+### Project Management
+- **System project**: ID=1 "默认" project marked with `is_system=True`
+- **Protection**: System projects cannot be deleted or renamed (API returns 403 Forbidden)
+- **Task assignment**: All tasks must have a `project_id` (defaults to 1 in creation form)
+- **Project tree structure**:
+  - **未安排** (status node, fixed at top) - Tasks without `start_time`
+  - **Regular projects** (including "默认" system project) - Tasks grouped by `project_id`
+  - **已完成** (status node, fixed at bottom) - Tasks with `status='completed'`
 
 ### Schedule View Rendering
 - Uses continuous rendering (no segmentation by hour)

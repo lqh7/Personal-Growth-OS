@@ -14,6 +14,8 @@ export interface ViewTask {
   endTime?: Date
   dueDate?: Date
   completed: boolean
+  completionNotes?: string
+  completedAt?: Date
   project?: {
     id: string
     name: string
@@ -59,6 +61,8 @@ export function useTaskAdapter() {
       // Use end_time as dueDate (截止时间就是结束时间)
       dueDate: apiTask.end_time ? new Date(apiTask.end_time) : undefined,
       completed: apiTask.status === 'completed',
+      completionNotes: apiTask.completion_notes,
+      completedAt: apiTask.completed_at ? new Date(apiTask.completed_at) : undefined,
       project: project ? {
         id: String(project.id),
         name: project.name,

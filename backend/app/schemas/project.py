@@ -28,6 +28,7 @@ class ProjectUpdate(BaseModel):
 class Project(ProjectBase):
     """Public schema for project."""
     id: int
+    is_system: bool = False
     created_at: datetime
     updated_at: datetime
 

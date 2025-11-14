@@ -6,11 +6,6 @@
     <!-- Default Variant (Kanban Card) -->
     <template v-if="variant === 'default'">
       <div class="card-header">
-        <el-checkbox
-          v-model="task.completed"
-          @click.stop
-          @change="$emit('complete', task.id)"
-        />
         <div class="card-priority">
           <el-rate
             v-model="task.priority"
@@ -89,11 +84,6 @@
     <!-- Compact Variant (List Item) -->
     <template v-else-if="variant === 'compact'">
       <div class="compact-content">
-        <el-checkbox
-          v-model="task.completed"
-          @click.stop
-          @change="$emit('complete', task.id)"
-        />
         <div class="compact-main">
           <span class="compact-title" :class="{ completed: task.completed }">
             {{ task.title }}
@@ -137,12 +127,6 @@
             <span class="project-name">{{ task.project.name }}</span>
           </div>
         </div>
-        <el-checkbox
-          v-model="task.completed"
-          size="small"
-          @click.stop
-          @change="$emit('complete', task.id)"
-        />
       </div>
     </template>
   </div>

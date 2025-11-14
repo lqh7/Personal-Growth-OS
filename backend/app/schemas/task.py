@@ -18,6 +18,7 @@ class TaskBase(BaseModel):
     snooze_until: Optional[datetime] = None
     parent_task_id: Optional[int] = None
     project_id: Optional[int] = None
+    completion_notes: Optional[str] = Field(None, description="User's reflection notes when completing the task")
 
 
 class TaskCreate(TaskBase):
@@ -37,6 +38,7 @@ class TaskUpdate(BaseModel):
     snooze_until: Optional[datetime] = None
     parent_task_id: Optional[int] = None
     project_id: Optional[int] = None
+    completion_notes: Optional[str] = None
 
 
 class TaskInDB(TaskBase):

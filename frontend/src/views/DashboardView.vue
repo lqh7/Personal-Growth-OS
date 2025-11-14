@@ -338,16 +338,6 @@ function getActivityIcon(type: Activity['type']): string {
   return icons[type] || '•'
 }
 
-async function handleTaskComplete(taskId: string) {
-  try {
-    await taskStore.updateTask(Number(taskId), { status: 'completed' })
-    ElMessage.success('任务已完成')
-    await loadTasks()
-  } catch (error) {
-    ElMessage.error('完成任务失败')
-  }
-}
-
 function handleTaskSnooze(taskId: string) {
   ElMessage.info(`延后任务: ${taskId}`)
 }

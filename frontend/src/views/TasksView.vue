@@ -92,7 +92,7 @@
               <ArrowRight />
             </el-icon>
             <span class="column-icon">📋</span>
-            <span class="column-label">未安排任务</span>
+            <span class="column-label">未安排</span>
             <span class="column-count">{{ floatingTasks.length }}</span>
           </div>
         </div>
@@ -108,7 +108,6 @@
                 :task="task"
                 variant="default"
                 @click="handleTaskClick(task.id)"
-                @complete="handleTaskComplete(task.id)"
                 @snooze="handleTaskSnooze(task.id)"
                 @schedule="handleTaskClick(task.id)"
                 @delete="handleTaskDelete(task.id)"
@@ -198,15 +197,6 @@
           <span v-else class="toolbar-hint">批量操作</span>
         </span>
         <div class="toolbar-actions">
-          <el-button
-            :disabled="selectedTasks.length === 0"
-            :type="selectedTasks.length > 0 ? 'success' : ''"
-            size="small"
-            @click="handleBatchComplete"
-          >
-            <el-icon><Check /></el-icon>
-            完成
-          </el-button>
           <el-button
             :disabled="selectedTasks.length === 0"
             size="small"
@@ -301,6 +291,59 @@
 
     <!-- Tree View -->
     <div v-else-if="viewMode === 'tree'" class="tree-view">
+      <!-- Unassigned Tasks (System Status Node - always at the top) -->
+      <div class="project-tree-node system-project unassigned-project">
+        <div class="project-header" @click="toggleProjectExpand('unassigned')">
+          <el-icon class="expand-icon" :class="{ 'is-expanded': unassignedProjectExpanded }">
+            <ArrowRight />
+          </el-icon>
+          <span class="project-name">📋 未安排</span>
+          <span class="project-task-count">{{ unassignedTasks.length }} 个任务</span>
+        </div>
+
+        <transition name="slide-down">
+          <div v-show="unassignedProjectExpanded" class="project-tasks">
+            <div
+              v-for="task in unassignedTasks"
+              :key="task.id"
+              class="tree-task-item"
+            >
+              <div class="task-content" @click="handleTaskClick(task.id)">
+                <span class="task-title" :class="{ 'task-completed': task.completed }">
+                  {{ task.title }}
+                </span>
+                <div class="task-meta">
+                  <el-tag
+                    v-if="task.status !== 'pending'"
+                    size="small"
+                    :type="task.status === 'in_progress' ? 'warning' : 'info'"
+                  >
+                    {{ getStatusLabel(task.status) }}
+                  </el-tag>
+                  <el-rate v-model="task.priority" disabled :max="5" size="small" />
+                  <span v-if="task.project" class="task-project-tag">
+                    <span class="project-dot" :style="{ backgroundColor: task.project.color }"></span>
+                    {{ task.project.name }}
+                  </span>
+                </div>
+              </div>
+              <div class="task-actions">
+                <el-button size="small" text @click.stop="handleTaskSnooze(task.id)">
+                  <el-icon><Clock /></el-icon>
+                </el-button>
+                <el-button size="small" text type="danger" @click.stop="handleTaskDelete(task.id)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+            <div v-if="unassignedTasks.length === 0" class="empty-project">
+              <el-icon><DocumentAdd /></el-icon>
+              <p>暂无浮动任务</p>
+            </div>
+          </div>
+        </transition>
+      </div>
+
       <!-- Regular Projects -->
       <div
         v-for="project in projectTreeData"
@@ -326,7 +369,7 @@
                 添加任务
               </el-button>
               <el-button
-                v-if="project.id !== '1'"
+                v-if="!project.is_system"
                 size="small"
                 text
                 @click.stop="handleEditProject(project.id)"
@@ -335,7 +378,7 @@
                 编辑
               </el-button>
               <el-button
-                v-if="project.id !== '1'"
+                v-if="!project.is_system"
                 size="small"
                 text
                 type="danger"
@@ -349,7 +392,7 @@
             <div class="project-stats">
               <span class="stat pending">{{ project.stats.pending }} 待办</span>
               <span class="stat in-progress">{{ project.stats.inProgress }} 进行中</span>
-              <span class="stat overdue" v-if="project.stats.overdue > 0">{{ project.stats.overdue }} 逾期</span>
+              <span class="stat overdue">{{ project.stats.overdue }} 逾期</span>
               <span class="stat completed">{{ project.stats.completed }} 已完成</span>
             </div>
           </div>
@@ -362,11 +405,6 @@
               :key="task.id"
               class="tree-task-item"
             >
-              <el-checkbox
-                v-model="task.completed"
-                @change="handleTaskComplete(task.id)"
-                @click.stop
-              />
               <div class="task-content" @click="handleTaskClick(task.id)">
                 <span class="task-title" :class="{ 'task-completed': task.completed }">
                   {{ task.title }}
@@ -422,11 +460,6 @@
               :key="task.id"
               class="tree-task-item"
             >
-              <el-checkbox
-                v-model="task.completed"
-                @change="handleTaskComplete(task.id)"
-                @click.stop
-              />
               <div class="task-content" @click="handleTaskClick(task.id)">
                 <span class="task-title task-completed">
                   {{ task.title }}
@@ -791,6 +824,121 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- Complete Task Dialog -->
+    <el-dialog v-model="showCompleteDialog" title="完成任务" width="500px">
+      <div class="complete-dialog-content">
+        <p class="dialog-hint">
+          <el-icon><SuccessFilled /></el-icon>
+          恭喜完成任务！可以记录一下完成心得（可选）
+        </p>
+        <el-input
+          v-model="completionNotes"
+          type="textarea"
+          :rows="5"
+          placeholder="在这里记录你的心得、学到的经验或想法...（可选）"
+        />
+      </div>
+      <template #footer>
+        <el-button @click="showCompleteDialog = false">取消</el-button>
+        <el-button type="primary" @click="confirmComplete">
+          确认完成
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Completed Task View Dialog (Read-Only) -->
+    <el-dialog
+      v-model="showCompletedTaskDialog"
+      title="任务详情"
+      width="700px"
+      :close-on-click-modal="false"
+    >
+      <div v-if="currentCompletedTask" class="completed-task-view">
+        <!-- Completion Banner -->
+        <div class="completion-banner">
+          <el-icon class="banner-icon"><SuccessFilled /></el-icon>
+          <div class="banner-content">
+            <span class="banner-title">✅ 已完成任务</span>
+            <span v-if="currentCompletedTask.completedAt" class="completion-time">
+              完成于：{{ formatDateTime(currentCompletedTask.completedAt) }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Read-Only Task Details -->
+        <el-descriptions :column="1" border class="task-details">
+          <el-descriptions-item label="任务标题">
+            {{ currentCompletedTask.title }}
+          </el-descriptions-item>
+
+          <el-descriptions-item label="任务描述">
+            {{ currentCompletedTask.description || '无描述' }}
+          </el-descriptions-item>
+
+          <el-descriptions-item label="所属项目">
+            <el-tag
+              v-if="currentCompletedTask.project"
+              size="small"
+              class="project-tag"
+              :style="{ borderLeftColor: currentCompletedTask.project.color }"
+            >
+              {{ currentCompletedTask.project.name }}
+            </el-tag>
+            <span v-else class="no-data">默认项目</span>
+          </el-descriptions-item>
+
+          <el-descriptions-item label="优先级">
+            <el-rate
+              :model-value="currentCompletedTask.priority"
+              disabled
+              :max="5"
+              size="small"
+            />
+          </el-descriptions-item>
+
+          <el-descriptions-item label="开始时间">
+            <span v-if="currentCompletedTask.startTime">
+              {{ formatDateTime(currentCompletedTask.startTime) }}
+            </span>
+            <span v-else class="no-data">未设置</span>
+          </el-descriptions-item>
+
+          <el-descriptions-item label="结束时间">
+            <span v-if="currentCompletedTask.endTime">
+              {{ formatDateTime(currentCompletedTask.endTime) }}
+            </span>
+            <span v-else class="no-data">未设置</span>
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <!-- Editable Completion Notes Section -->
+        <div class="completion-notes-section">
+          <div class="section-header">
+            <el-icon><Edit /></el-icon>
+            <span>完成心得</span>
+            <span class="editable-badge">可编辑</span>
+          </div>
+          <el-input
+            v-model="completedTaskNotes"
+            type="textarea"
+            :rows="6"
+            placeholder="在这里记录你的心得、学到的经验或想法...（可选）"
+            class="notes-input"
+          />
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="closeCompletedTaskDialog">关闭</el-button>
+        <el-button
+          type="primary"
+          @click="saveCompletedTaskNotes"
+        >
+          保存心得
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -896,10 +1044,17 @@ const showIgnitionResult = ref(false)
 const showSnoozeDialog = ref(false)
 const showTaskDialog = ref(false)
 const showProjectDialog = ref(false)
+const showCompleteDialog = ref(false)
+const showCompletedTaskDialog = ref(false)
 
 const igniting = ref(false)
 const currentSnoozeTaskId = ref<string | null>(null)
+const currentCompleteTaskId = ref<string | null>(null)
+const completionNotes = ref('')
+const currentCompletedTask = ref<Task | null>(null)
+const completedTaskNotes = ref('')
 const completedProjectExpanded = ref(true) // 已完成项目折叠状态
+const unassignedProjectExpanded = ref(true) // 未安排状态节点折叠状态
 const floatingTasksExpanded = ref(true) // 未安排任务折叠状态
 const pendingExpanded = ref(true) // 待办任务折叠状态
 const inProgressExpanded = ref(true) // 进行中任务折叠状态
@@ -923,7 +1078,7 @@ const taskForm = ref({
   title: '',
   description: '',
   priority: 3,
-  projectId: '',
+  projectId: '1',  // 默认选中ID=1的"默认"项目
   startTime: null as Date | null,
   endTime: null as Date | null
 })
@@ -1079,6 +1234,7 @@ const projects = computed(() => {
     name: p.name,
     color: p.color,
     description: p.description,
+    is_system: p.is_system, // 系统项目标识，用于隐藏编辑/删除按钮
     expanded: projectExpandState.value[p.id] ?? true // 从响应式状态读取
   }))
 })
@@ -1086,10 +1242,13 @@ const projects = computed(() => {
 // Project tree data with expanded state
 const projectTreeData = computed(() => {
   const projectData = projects.value.map(project => {
-    // For "未安排" project (ID=1), include both tasks with project_id=1 AND tasks without project
-    const projectTasks = project.id === '1'
-      ? filteredActiveTasks.value.filter(t => t.project?.id === project.id || !t.project)
-      : filteredActiveTasks.value.filter(t => t.project?.id === project.id)
+    // 项目包含所有已安排的任务（排除浮动任务：startTime为null）
+    // 包括：待办、进行中、逾期（不包括已完成）
+    const projectTasks = filteredTasks.value.filter(t =>
+      t.project?.id === project.id &&
+      t.startTime !== null &&  // 排除浮动任务
+      t.status !== 'completed'  // 排除已完成任务
+    )
 
     return {
       ...project,
@@ -1099,22 +1258,23 @@ const projectTreeData = computed(() => {
         pending: projectTasks.filter(t => t.status === 'pending').length,
         inProgress: projectTasks.filter(t => t.status === 'in_progress').length,
         overdue: projectTasks.filter(t => t.status === 'overdue').length,
-        completed: 0 // No completed tasks shown in regular projects
+        completed: projectTasks.filter(t => t.status === 'completed').length
       }
     }
   })
 
-  // Sort: "未安排" (ID=1) always first, then others
-  return projectData.sort((a, b) => {
-    if (a.id === '1') return -1
-    if (b.id === '1') return 1
-    return 0
-  })
+  // 不需要特殊排序，保持原始顺序
+  return projectData
 })
 
 // Completed tasks (for "已完成" system project node)
 const completedTasks = computed(() => {
   return filteredTasks.value.filter(t => t.status === 'completed')
+})
+
+// Unassigned tasks (for "未安排" system status node - tasks without startTime)
+const unassignedTasks = computed(() => {
+  return filteredActiveTasks.value.filter(t => !t.startTime)
 })
 
 // Floating tasks (tasks without startTime)
@@ -1168,8 +1328,8 @@ function handleSearch() {
 
 function handleQuickCreate() {
   editingTask.value = null
-  // Set default project to "未安排" (id: 1)
-  const defaultProject = projects.value.find(p => p.name === '未安排')
+  // Set default project to "默认" (id: 1)
+  const defaultProject = projects.value.find(p => p.name === '默认')
   taskForm.value = {
     title: '',
     description: '',
@@ -1241,27 +1401,59 @@ function handleConfirmIgnition() {
 function handleTaskClick(taskId: string) {
   const task = allTasks.value.find((t) => t.id === taskId)
   if (task) {
-    editingTask.value = task
-    taskForm.value = {
-      title: task.title,
-      description: task.description || '',
-      priority: task.priority,
-      projectId: task.project?.id || '',
-      startTime: task.startTime || null,
-      endTime: task.endTime || null
+    // 已完成任务显示只读视图
+    if (task.status === 'completed') {
+      currentCompletedTask.value = task
+      completedTaskNotes.value = task.completionNotes || ''
+      showCompletedTaskDialog.value = true
+    } else {
+      // 其他状态任务显示编辑对话框
+      editingTask.value = task
+      taskForm.value = {
+        title: task.title,
+        description: task.description || '',
+        priority: task.priority,
+        projectId: task.project?.id || '',
+        startTime: task.startTime || null,
+        endTime: task.endTime || null
+      }
+      showTaskDialog.value = true
     }
-    showTaskDialog.value = true
   }
 }
 
-async function handleTaskComplete(taskId: string) {
+function handleTaskComplete(taskId: string) {
+  const task = allTasks.value.find((t) => t.id === taskId)
+  if (!task) {
+    ElMessage.error('任务不存在')
+    return
+  }
+
+  // 只允许逾期任务标记为完成
+  if (task.status !== 'overdue') {
+    ElMessage.warning('只有逾期任务可以标记为已完成')
+    return
+  }
+
+  // 显示完成任务对话框
+  currentCompleteTaskId.value = taskId
+  completionNotes.value = ''
+  showCompleteDialog.value = true
+}
+
+async function confirmComplete() {
+  if (!currentCompleteTaskId.value) return
+
   try {
-    const task = allTasks.value.find((t) => t.id === taskId)
-    if (task) {
-      const newStatus = task.completed ? 'pending' : 'completed'
-      await taskStore.updateTask(Number(taskId), { status: newStatus })
-      ElMessage.success(newStatus === 'completed' ? '任务已完成！' : '任务已恢复')
-    }
+    await taskStore.updateTask(Number(currentCompleteTaskId.value), {
+      status: 'completed',
+      completion_notes: completionNotes.value.trim() || undefined
+    })
+    ElMessage.success('任务已完成！')
+    showCompleteDialog.value = false
+    currentCompleteTaskId.value = null
+    completionNotes.value = ''
+    await loadTasks()
   } catch (error) {
     ElMessage.error('更新任务状态失败')
   }
@@ -1371,24 +1563,6 @@ function handleSelectionChange(selection: ViewTask[]) {
 
 function clearSelection() {
   selectedTasks.value = []
-}
-
-async function handleBatchComplete() {
-  if (selectedTasks.value.length === 0) {
-    ElMessage.warning('请先选择要操作的任务')
-    return
-  }
-
-  try {
-    const promises = selectedTasks.value.map(task =>
-      taskStore.updateTask(Number(task.id), { status: 'completed' })
-    )
-    await Promise.all(promises)
-    ElMessage.success(`成功完成 ${selectedTasks.value.length} 个任务`)
-    clearSelection()
-  } catch (error) {
-    ElMessage.error('批量完成任务失败')
-  }
 }
 
 async function handleCompleteOverdueTasks() {
@@ -1651,6 +1825,10 @@ function toggleProjectExpand(projectId: string) {
     completedProjectExpanded.value = !completedProjectExpanded.value
     return
   }
+  if (projectId === 'unassigned') {
+    unassignedProjectExpanded.value = !unassignedProjectExpanded.value
+    return
+  }
 
   // 修改响应式状态
   const currentState = projectExpandState.value[projectId] ?? true
@@ -1880,7 +2058,7 @@ function handleEditProject(projectId: string) {
 
 async function handleDeleteProject(projectId: string) {
   try {
-    await ElMessageBox.confirm('确定要删除这个项目吗?项目下的任务将移至"未安排"', '确认删除', {
+    await ElMessageBox.confirm('确定要删除这个项目吗？项目下的任务将移至"默认"项目', '确认删除', {
       confirmButtonText: '删除',
       cancelButtonText: '取消',
       type: 'warning'
@@ -1893,6 +2071,36 @@ async function handleDeleteProject(projectId: string) {
     if (error !== 'cancel') {
       ElMessage.error('删除项目失败')
     }
+  }
+}
+
+// ============================================
+// Completed Task View Dialog Handlers
+// ============================================
+function closeCompletedTaskDialog() {
+  showCompletedTaskDialog.value = false
+  currentCompletedTask.value = null
+  completedTaskNotes.value = ''
+}
+
+async function saveCompletedTaskNotes() {
+  if (!currentCompletedTask.value) return
+
+  try {
+    await taskStore.updateTask(Number(currentCompletedTask.value.id), {
+      completion_notes: completedTaskNotes.value.trim() || undefined
+    })
+    ElMessage.success('心得已保存')
+
+    // 重新加载任务以更新显示
+    await loadTasks()
+
+    // 更新当前任务的心得内容
+    if (currentCompletedTask.value) {
+      currentCompletedTask.value.completionNotes = completedTaskNotes.value.trim()
+    }
+  } catch (error) {
+    ElMessage.error('保存心得失败')
   }
 }
 
@@ -2324,6 +2532,116 @@ onMounted(() => {
     margin-bottom: $spacing-lg;
     font-size: $font-size-sm;
     color: $color-text-secondary;
+  }
+}
+
+// ============================================
+// Complete Task Dialog
+// ============================================
+.complete-dialog-content {
+  .dialog-hint {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    padding: $spacing-md;
+    background-color: rgba($color-success, 0.1);
+    border-radius: $radius-md;
+    margin-bottom: $spacing-lg;
+    font-size: $font-size-md;
+    color: $color-success;
+    font-weight: 500;
+  }
+}
+
+// ============================================
+// Completed Task View Dialog (Read-Only)
+// ============================================
+.completed-task-view {
+  .completion-banner {
+    display: flex;
+    align-items: center;
+    gap: $spacing-md;
+    padding: $spacing-lg;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: $radius-md;
+    color: white;
+    margin-bottom: $spacing-xl;
+
+    .banner-icon {
+      font-size: 32px;
+      flex-shrink: 0;
+    }
+
+    .banner-content {
+      display: flex;
+      flex-direction: column;
+      gap: $spacing-xs;
+
+      .banner-title {
+        font-size: $font-size-lg;
+        font-weight: 600;
+      }
+
+      .completion-time {
+        font-size: $font-size-sm;
+        opacity: 0.9;
+      }
+    }
+  }
+
+  .task-details {
+    margin-bottom: $spacing-xl;
+
+    .no-data {
+      color: $color-text-tertiary;
+      font-size: $font-size-sm;
+    }
+
+    .project-tag {
+      border: 1px solid $color-border;
+      border-left-width: 3px;
+      font-size: $font-size-xs;
+      background-color: $bg-color-card;
+      color: $color-text-primary;
+      font-weight: 500;
+    }
+  }
+
+  .completion-notes-section {
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: $spacing-sm;
+      margin-bottom: $spacing-md;
+      font-size: $font-size-md;
+      font-weight: 600;
+      color: $color-text-primary;
+
+      .editable-badge {
+        margin-left: auto;
+        padding: 2px 8px;
+        background-color: rgba($color-primary, 0.1);
+        color: $color-primary;
+        font-size: $font-size-xs;
+        font-weight: 500;
+        border-radius: $radius-sm;
+      }
+    }
+
+    .notes-input {
+      background-color: white;
+      border: 2px solid $color-primary;
+      border-radius: $radius-md;
+
+      :deep(textarea) {
+        font-size: $font-size-sm;
+        line-height: 1.6;
+      }
+
+      &:hover {
+        border-color: lighten($color-primary, 10%);
+      }
+    }
   }
 }
 
