@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Personal Growth OS** is a "second brain" application designed to accelerate personal growth by helping users combat procrastination, solidify knowledge, and drive continuous self-improvement through data-driven reflection.
 
-**Current Status**: MVP implementation in progress. Backend core features and database models are implemented. Frontend has basic UI structure with TasksView supporting Kanban/List views. RAG and advanced AI features are partially implemented.
+**Current Status**: MVP in active development. Backend core features (CRUD, LangGraph agents, RAG) are implemented. Frontend features weekly schedule view, task kanban with floating task column, and basic task management. Chinese character encoding is fully supported.
 
 ### Core Mission (Three Pillars)
 
@@ -166,6 +166,11 @@ cd backend && rm -f personal_growth_os.db && cd ..
 # Linux/Mac: rm -f personal_growth_os.db
 ```
 
+**Utility Scripts** (in `backend/`):
+- `clear_tasks.py` - Clear all tasks from database (useful for testing)
+- `check_encoding.py` - Verify UTF-8 encoding in database
+- `debug_snooze.py` / `debug_snooze_display.py` - Debug snooze functionality
+
 **Note**: This project includes Windows-specific command syntax in many places. When working on Windows, use the Windows commands provided. On Linux/Mac, use the alternative commands shown.
 
 ## Key Design Decisions
@@ -196,15 +201,20 @@ Core entities with relationships:
    - Generation of "minimum viable starting task" to reduce action friction
 
 2. **Calendar/Schedule View (日程管理)** - IMPLEMENTED
-   - Weekly schedule visualization with time-slot planning
-   - Tasks with `start_time`/`end_time` display on calendar grid
-   - Supports all-day tasks and time-specific tasks
+   - Weekly schedule visualization with time-slot planning (8:00-21:00 viewport)
+   - Tasks with `start_time`/`end_time` display on calendar grid with minute-level precision (1px = 1min)
+   - Supports all-day tasks, time-specific tasks, and truncation effects for events outside viewport
+   - Task overlap detection using sweep-line algorithm with automatic aggregation blocks
+   - Floating task column for tasks without scheduled time (collapsible)
    - Frontend components: WeekSchedule, TaskCard, AllDayTaskCard, AggregationBlock
    - Enables time-boxing and time-blocking workflows
+   - **Note**: Drag-and-drop was removed 2025-11-13; time editing now done via edit dialog
 
-3. **Flexible Task Deferral (灵活延后)** - PARTIAL
-   - `snooze_until` database field implemented
-   - UI/notification system pending
+3. **Flexible Task Deferral (灵活延后)** - IMPLEMENTED
+   - `snooze_until` database field with timezone handling
+   - Snooze button in task kanban floating task column
+   - Tasks auto-reappear when snooze expires
+   - Display in dedicated "延后任务" section on DashboardView
 
 4. **Contextual Knowledge Resurrection (知识自动重现)** - PARTIAL
    - Semantic search API implemented via ChromaDB
@@ -264,7 +274,7 @@ frontend/src/
 ├── components/
 │   ├── tasks/              # Task list/Kanban components (TaskList, TaskCard)
 │   ├── notes/              # Note list components (NoteCard)
-│   ├── schedule/           # Calendar/schedule components (WeekSchedule, TaskCard, AllDayTaskCard, AggregationBlock, ConnectorLine)
+│   ├── schedule/           # Calendar/schedule components (WeekSchedule, TaskCard, AllDayTaskCard, AggregationBlock)
 │   ├── layout/             # Layout components (Sidebar, ChatPanel)
 │   └── (other domain components as needed)
 ├── stores/                 # Pinia state management
@@ -501,5 +511,28 @@ This allows Claude Code to execute commands and make file changes without reques
 3. **DON'T** put SQL queries in API endpoints - use CRUD layer
 4. **DON'T** forget to handle LLM JSON parsing errors (strip markdown code blocks)
 5. **DON'T** skip TypeScript type definitions when adding new features
-6. **DO** check [LANGGRAPH_ARCHITECTURE.md](LANGGRAPH_ARCHITECTURE.md:1) before creating new agents
-7. **DO** use `Annotated[List[Dict], add]` for accumulating state fields in LangGraph
+6. **DON'T** forget UTF-8 encoding for Chinese characters (FastAPI uses `UTF8JSONResponse` + middleware)
+7. **DO** check [LANGGRAPH_ARCHITECTURE.md](LANGGRAPH_ARCHITECTURE.md:1) before creating new agents
+8. **DO** use `Annotated[List[Dict], add]` for accumulating state fields in LangGraph
+9. **DO** refer to [日程表详细设计.md](doc/日程表详细设计.md:1) for schedule view implementation details
+
+## Known Implementation Details
+
+### Chinese Character Encoding
+The backend uses a custom `UTF8JSONResponse` class and middleware to ensure proper Chinese character display:
+- `UTF8JSONResponse` with `ensure_ascii=False` in `app/main.py`
+- Middleware adds `charset=utf-8` to all JSON responses
+- This resolves issues with Chinese task titles, descriptions, and project names
+
+### Task Time Management
+- **Floating tasks** (no `start_time`): Display in collapsible floating column on Kanban
+- **Scheduled tasks** (`start_time` + `end_time`): Display on weekly schedule with minute precision
+- **Snoozed tasks** (`snooze_until`): Hidden until snooze expires, then reappear
+- **All-day events**: Tasks spanning 8:00-21:00 viewport display in dedicated all-day row
+- Time editing is done through task edit dialog (drag-and-drop removed as of 2025-11-13)
+
+### Schedule View Rendering
+- Uses continuous rendering (no segmentation by hour)
+- Overlap detection via sweep-line algorithm groups overlapping tasks into gray aggregation blocks
+- 1 minute = 1 pixel positioning precision
+- Truncation indicators (zigzag + arrow + time label) for events outside 8:00-21:00 viewport

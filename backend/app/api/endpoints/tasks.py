@@ -5,6 +5,9 @@ from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.db.database import get_db
 from app.schemas.task import (
@@ -195,15 +198,82 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
 def snooze_task(
     task_id: int,
     snooze_until: datetime,
+    mode: str = "start",  # "start" or "end"
+    duration_hours: float = None,  # For floating tasks: duration in hours
     db: Session = Depends(get_db)
 ):
     """
-    Snooze a task until a specific time.
-    The task will be hidden from the main view until the snooze time.
+    Snooze (reschedule) a task to a new time.
+
+    Args:
+        task_id: ID of the task to snooze
+        snooze_until: The new time to schedule the task
+        mode: What to reschedule
+            - "start": Move start_time to snooze_until, end_time moves with it (duration preserved)
+            - "end": Move end_time to snooze_until, start_time unchanged (duration extends)
+        duration_hours: For floating tasks (no times), specifies task duration (default: 1.0)
+
+    New Logic:
+        - mode="start": Start time → snooze_until, end time shifts by same offset (keeps duration)
+        - mode="end": End time → snooze_until, start time unchanged (extends duration)
+        - Floating task: Sets start_time=snooze_until, end_time=start+duration_hours
+
+    Note: Tasks remain visible after snoozing.
     """
-    task = crud_task.snooze_task(db, task_id, snooze_until)
+    from datetime import timedelta
+
+    task = crud_task.get_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    # Determine if this is a floating task (no times set)
+    is_floating = not task.start_time and not task.end_time
+
+    if mode == "start":
+        if is_floating:
+            # Floating task: set start time and duration
+            task.start_time = snooze_until
+            hours = duration_hours if duration_hours is not None else 1.0
+            task.end_time = snooze_until + timedelta(hours=hours)
+        elif task.start_time and task.end_time:
+            # Has both times: calculate original duration and preserve it
+            duration = task.end_time - task.start_time
+            new_end = snooze_until + duration
+
+            # Use SQL UPDATE to force the change
+            from sqlalchemy import update as sql_update
+            from app.db.models import Task as TaskModel
+            stmt = sql_update(TaskModel).where(TaskModel.id == task_id).values(
+                start_time=snooze_until,
+                end_time=new_end
+            )
+            db.execute(stmt)
+            db.flush()  # Flush changes before refresh
+
+            # Refresh task to get updated values
+            db.refresh(task)
+        else:
+            # Has only start_time or only end_time
+            task.start_time = snooze_until
+            if not task.end_time:
+                hours = duration_hours if duration_hours is not None else 1.0
+                task.end_time = snooze_until + timedelta(hours=hours)
+
+    elif mode == "end":
+        # Move end time only, start time unchanged (extends duration)
+        task.end_time = snooze_until
+        # If no start_time, set it to end_time - duration
+        if not task.start_time:
+            hours = duration_hours if duration_hours is not None else 1.0
+            task.start_time = snooze_until - timedelta(hours=hours)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid mode. Use 'start' or 'end'")
+
+    # Persist snooze_until timestamp for tracking
+    task.snooze_until = snooze_until
+
+    db.commit()
+    db.refresh(task)
     return task
 
 
@@ -278,3 +348,4 @@ def snooze_task(
 #         minimum_viable_task=minimum_viable_task or subtasks[0],
 #         related_notes=related_notes
 #     )
+

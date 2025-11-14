@@ -82,8 +82,6 @@
         <div
           class="day-slots"
           @click="handleSlotClick(day.date, $event)"
-          @dragover.prevent="handleDragOver($event, day.date)"
-          @drop="handleDrop(day.date, $event)"
         >
           <!-- Hour Grid Lines (background) -->
           <div
@@ -100,17 +98,6 @@
             class="half-hour-grid-line"
             :style="{ top: `${(hour - 8) * 60 + 30}px` }"
           ></div>
-
-          <!-- Drag Preview Overlay -->
-          <div
-            v-if="dragPreview && dragPreview.date.toDateString() === day.date.toDateString()"
-            class="drag-preview"
-            :style="{ top: `${dragPreview.top}px`, height: '60px' }"
-          >
-            <div class="drag-preview-content">
-              {{ draggingTask?.title }}
-            </div>
-          </div>
 
           <!-- Render Items (TaskCard or AggregationBlock) -->
           <template v-for="item in day.renderItems" :key="item.id">
@@ -138,63 +125,12 @@
         </div>
       </div>
     </div>
-
-    <!-- Floating Tasks (No Time) - Always Visible -->
-    <div
-      class="floating-tasks"
-      :class="{ 'is-drag-over': isDragOverFloatingArea }"
-      @dragover.prevent="handleFloatingAreaDragOver"
-      @dragleave="handleFloatingAreaDragLeave"
-      @drop="handleFloatingAreaDrop"
-    >
-      <div class="floating-tasks-header">
-        <span>📋 无时间任务（拖拽到日程表可指定时间）</span>
-        <span v-if="floatingTasks.length > 0" class="task-count">{{ floatingTasks.length }}</span>
-      </div>
-
-      <!-- Task List (when tasks exist) -->
-      <div v-if="floatingTasks.length > 0" class="floating-tasks-list">
-        <div
-          v-for="task in floatingTasks"
-          :key="task.id"
-          class="floating-task-item"
-          draggable="true"
-          @dragstart="handleDragStart(task, $event)"
-          @dragend="handleDragEnd"
-          @click="handleTaskClick(task)"
-        >
-          <el-checkbox
-            v-model="task.completed"
-            @change="$emit('task-complete', task)"
-            @click.stop
-          />
-          <span class="task-title" :class="{ 'is-completed': task.completed }">
-            {{ task.title }}
-          </span>
-          <el-button
-            text
-            size="small"
-            @click.stop="$emit('task-snooze', task.id)"
-          >
-            <el-icon><Clock /></el-icon>
-            延后
-          </el-button>
-        </div>
-      </div>
-
-      <!-- Empty State (when no tasks) -->
-      <div v-else class="floating-tasks-empty">
-        <el-icon class="empty-icon"><Calendar /></el-icon>
-        <p class="empty-title">暂无待办任务</p>
-        <p class="empty-hint">将日程表上的任务拖到这里可标记为"稍后安排"</p>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ArrowLeft, ArrowRight, Clock, Calendar } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import TaskCard from './TaskCard.vue'
 import AggregationBlock from './AggregationBlock.vue'
 import AllDayTaskCard from './AllDayTaskCard.vue'
@@ -249,11 +185,6 @@ interface WeekDay {
   renderItems: RenderItem[]
 }
 
-interface DragPreview {
-  date: Date
-  top: number
-}
-
 // ============================================
 // Props & Emits
 // ============================================
@@ -263,10 +194,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'task-click', task: Task): void
-  (e: 'task-complete', task: Task): void
-  (e: 'task-snooze', taskId: string): void
   (e: 'slot-click', date: Date, hour: number): void
-  (e: 'task-drop', taskId: string, date: Date, hour: number): void
 }>()
 
 // ============================================
@@ -274,9 +202,6 @@ const emit = defineEmits<{
 // ============================================
 const currentWeekStart = ref(getStartOfWeek(new Date()))
 const hours = Array.from({ length: 13 }, (_, i) => i + 8) // 8:00 - 20:00
-const draggingTask = ref<Task | null>(null)
-const dragPreview = ref<DragPreview | null>(null)
-const isDragOverFloatingArea = ref(false)
 
 // Constants
 const SCHEDULE_START_HOUR = 8
@@ -320,10 +245,6 @@ const weekRangeText = computed(() => {
   }
 
   return `${formatDate(start)} - ${formatDate(end)}`
-})
-
-const floatingTasks = computed(() => {
-  return props.tasks.filter(task => !task.startTime && !task.completed)
 })
 
 // ============================================
@@ -589,92 +510,6 @@ function handleSlotClick(date: Date, event: MouseEvent) {
 function handleTaskClick(task: Task) {
   emit('task-click', task)
 }
-
-function handleDragStart(task: Task, event: DragEvent) {
-  draggingTask.value = task
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('taskId', task.id)
-    // Transparent drag image
-    const img = new Image()
-    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
-    event.dataTransfer.setDragImage(img, 0, 0)
-  }
-}
-
-function handleDragEnd() {
-  draggingTask.value = null
-  dragPreview.value = null
-}
-
-function handleDragOver(event: DragEvent, date: Date) {
-  event.preventDefault()
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'move'
-  }
-
-  // Calculate preview position
-  const target = event.currentTarget as HTMLElement
-  const rect = target.getBoundingClientRect()
-  const offsetY = event.clientY - rect.top
-
-  // Snap to 15-minute boundaries (more flexible than hourly)
-  const minutesFromStart = Math.floor(offsetY / MINUTES_PER_PIXEL)
-  const snappedMinutes = Math.floor(minutesFromStart / 15) * 15
-  const top = snappedMinutes * MINUTES_PER_PIXEL
-
-  dragPreview.value = { date, top }
-}
-
-function handleDrop(date: Date, event: DragEvent) {
-  event.preventDefault()
-
-  const taskId = event.dataTransfer?.getData('taskId')
-  if (!taskId) return
-
-  // Calculate time from drop position with 15-minute precision
-  const target = event.currentTarget as HTMLElement
-  const rect = target.getBoundingClientRect()
-  const offsetY = event.clientY - rect.top
-  const minutesFromStart = Math.floor(offsetY / MINUTES_PER_PIXEL)
-  // Snap to 15-minute boundaries
-  const snappedMinutes = Math.floor(minutesFromStart / 15) * 15
-  const hour = SCHEDULE_START_HOUR + Math.floor(snappedMinutes / 60)
-  const minute = snappedMinutes % 60
-
-  emit('task-drop', taskId, date, hour, minute)
-
-  dragPreview.value = null
-  draggingTask.value = null
-}
-
-// ============================================
-// Floating Area Drag Handlers
-// ============================================
-function handleFloatingAreaDragOver(event: DragEvent) {
-  event.preventDefault()
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'move'
-  }
-  isDragOverFloatingArea.value = true
-}
-
-function handleFloatingAreaDragLeave() {
-  isDragOverFloatingArea.value = false
-}
-
-function handleFloatingAreaDrop(event: DragEvent) {
-  event.preventDefault()
-  isDragOverFloatingArea.value = false
-
-  const taskId = event.dataTransfer?.getData('taskId')
-  if (!taskId) return
-
-  // Emit event to remove time from task (convert to floating task)
-  emit('task-drop', taskId, null as any, -1, -1) // Special signal: -1 means remove time
-
-  draggingTask.value = null
-}
 </script>
 
 <style scoped lang="scss">
@@ -870,135 +705,6 @@ $color-aggregation: #e5e7eb;
       border-top: 1px dashed rgba($color-border, 0.5);
       pointer-events: none;
       z-index: 0;
-    }
-
-    // Drag preview
-    .drag-preview {
-      position: absolute;
-      left: 4px;
-      right: 4px;
-      background-color: rgba($color-primary, 0.1);
-      border: 2px dashed $color-primary;
-      border-radius: $radius-sm;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 5;
-      pointer-events: none;
-
-      .drag-preview-content {
-        background-color: white;
-        padding: $spacing-xs $spacing-sm;
-        border-radius: $radius-sm;
-        font-size: 12px;
-        font-weight: 500;
-        color: $color-text-primary;
-        box-shadow: $shadow-sm;
-        max-width: 90%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-    }
-  }
-}
-
-// ============================================
-// Floating Tasks
-// ============================================
-.floating-tasks {
-  padding: $spacing-md;
-  background-color: $bg-color-hover;
-  border-radius: $radius-md;
-  border: 2px dashed $color-border;
-  transition: all $transition-fast;
-
-  // Drag-over feedback
-  &.is-drag-over {
-    border-color: $color-primary;
-    background-color: rgba($color-primary, 0.05);
-    box-shadow: 0 0 0 4px rgba($color-primary, 0.1);
-  }
-
-  .floating-tasks-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: $spacing-md;
-    font-size: $font-size-sm;
-    font-weight: 500;
-    color: $color-text-primary;
-
-    .task-count {
-      background-color: $color-primary;
-      color: white;
-      font-size: 12px;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: $radius-round;
-    }
-  }
-
-  .floating-tasks-list {
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-sm;
-  }
-
-  .floating-task-item {
-    display: flex;
-    align-items: center;
-    gap: $spacing-md;
-    padding: $spacing-sm $spacing-md;
-    background-color: white;
-    border-radius: $radius-sm;
-    cursor: move;
-    transition: all $transition-fast;
-
-    &:hover {
-      background-color: darken(white, 2%);
-      box-shadow: $shadow-sm;
-    }
-
-    .task-title {
-      flex: 1;
-      font-size: $font-size-sm;
-      color: $color-text-primary;
-
-      &.is-completed {
-        text-decoration: line-through;
-        color: $color-text-tertiary;
-      }
-    }
-  }
-
-  // Empty State
-  .floating-tasks-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: $spacing-xl $spacing-md;
-    text-align: center;
-
-    .empty-icon {
-      font-size: 48px;
-      color: $color-text-tertiary;
-      margin-bottom: $spacing-md;
-    }
-
-    .empty-title {
-      margin: 0 0 $spacing-xs 0;
-      font-size: $font-size-md;
-      font-weight: 500;
-      color: $color-text-secondary;
-    }
-
-    .empty-hint {
-      margin: 0;
-      font-size: $font-size-sm;
-      color: $color-text-tertiary;
-      line-height: 1.5;
     }
   }
 }

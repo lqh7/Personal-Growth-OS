@@ -33,11 +33,26 @@ export function useTaskAdapter() {
       ? projectStore.getProjectById(apiTask.project_id)
       : undefined
 
+    // Calculate correct status based on current time and task times
+    let status = apiTask.status
+    const now = new Date()
+
+    // Don't override user-controlled statuses
+    if (apiTask.status !== 'completed' && apiTask.status !== 'archived') {
+      // Check if task is overdue (end_time has passed)
+      if (apiTask.end_time) {
+        const endTime = new Date(apiTask.end_time)
+        if (now > endTime) {
+          status = 'overdue'
+        }
+      }
+    }
+
     return {
       id: String(apiTask.id),
       title: apiTask.title,
       description: apiTask.description,
-      status: apiTask.status,
+      status: status,
       priority: apiTask.priority,
       startTime: apiTask.start_time ? new Date(apiTask.start_time) : undefined,
       endTime: apiTask.end_time ? new Date(apiTask.end_time) : undefined,

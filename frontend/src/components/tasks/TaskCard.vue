@@ -27,7 +27,15 @@
           </span>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="snooze">
+              <el-dropdown-item v-if="task.status === 'overdue'" command="complete">
+                <el-icon><Check /></el-icon>
+                已完成
+              </el-dropdown-item>
+              <el-dropdown-item v-if="!task.startTime && !task.endTime" command="schedule">
+                <el-icon><Calendar /></el-icon>
+                安排
+              </el-dropdown-item>
+              <el-dropdown-item v-if="task.startTime || task.endTime" command="snooze">
                 <el-icon><Clock /></el-icon>
                 延后
               </el-dropdown-item>
@@ -141,7 +149,7 @@
 </template>
 
 <script setup lang="ts">
-import { MoreFilled, Clock, Edit, Delete } from '@element-plus/icons-vue'
+import { MoreFilled, Clock, Edit, Delete, Calendar, Check } from '@element-plus/icons-vue'
 
 // ============================================
 // Props & Emits
@@ -177,6 +185,7 @@ const emit = defineEmits<{
   click: [id: string]
   complete: [id: string]
   snooze: [id: string]
+  schedule: [id: string]
   delete: [id: string]
 }>()
 
@@ -188,8 +197,12 @@ function handleClick() {
 }
 
 function handleCommand(command: string) {
-  if (command === 'snooze') {
+  if (command === 'complete') {
+    emit('complete', props.task.id)
+  } else if (command === 'snooze') {
     emit('snooze', props.task.id)
+  } else if (command === 'schedule') {
+    emit('schedule', props.task.id)
   } else if (command === 'edit') {
     emit('click', props.task.id)
   } else if (command === 'delete') {

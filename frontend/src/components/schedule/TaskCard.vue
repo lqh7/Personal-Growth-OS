@@ -11,10 +11,7 @@
         class="task-card"
         :class="[priorityClass, { 'truncated-top': isTruncatedTop, 'truncated-bottom': isTruncatedBottom, 'small-card': isSmallCard }]"
         :style="cardStyle"
-        draggable="true"
         @click="$emit('task-click', task)"
-        @dragstart="handleDragStart"
-        @dragend="handleDragEnd"
       >
         <!-- Top Truncation Indicator -->
         <div v-if="isTruncatedTop" class="truncation-indicator truncation-top">
@@ -89,24 +86,6 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   (e: 'task-click', task: Task): void
 }>()
-
-// ============================================
-// Methods
-// ============================================
-function handleDragStart(event: DragEvent) {
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('taskId', props.task.id)
-    // Transparent drag image (prevent default browser ghost image)
-    const img = new Image()
-    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
-    event.dataTransfer.setDragImage(img, 0, 0)
-  }
-}
-
-function handleDragEnd() {
-  // Cleanup if needed
-}
 
 // ============================================
 // Computed
@@ -206,7 +185,7 @@ $font-size-sm: 14px;
   padding: $spacing-xs $spacing-sm;
   border-radius: $radius-sm;
   color: white;
-  cursor: move; // Changed from pointer to indicate draggable
+  cursor: pointer;
   transition: all $transition-fast;
   overflow: hidden;
   z-index: 1;

@@ -8,10 +8,8 @@
           <span class="stat-item">待办 {{ stats.pending }}</span>
           <span class="stat-divider">·</span>
           <span class="stat-item">进行中 {{ stats.inProgress }}</span>
-          <span class="stat-divider">·</span>
-          <span class="stat-item" v-if="stats.overdue > 0" style="color: #f56c6c;">逾期 {{ stats.overdue }}</span>
           <span class="stat-divider" v-if="stats.overdue > 0">·</span>
-          <span class="stat-item">已完成 {{ stats.completed }}</span>
+          <span class="stat-item" v-if="stats.overdue > 0" style="color: #f56c6c;">逾期 {{ stats.overdue }}</span>
         </div>
       </div>
       <div class="header-actions">
@@ -84,13 +82,17 @@
     <div v-if="viewMode === 'kanban'" class="kanban-view">
       <!-- Floating Tasks Column (No Time) -->
       <div class="kanban-column floating">
-        <div class="column-header" @click="toggleFloatingTasks">
+        <div class="column-header">
           <div class="column-title">
-            <el-icon class="expand-icon" :class="{ 'is-expanded': floatingTasksExpanded }">
+            <el-icon
+              class="expand-icon"
+              :class="{ 'is-expanded': floatingTasksExpanded }"
+              @click="toggleFloatingTasks"
+            >
               <ArrowRight />
             </el-icon>
             <span class="column-icon">📋</span>
-            <span class="column-label">浮动任务</span>
+            <span class="column-label">未安排任务</span>
             <span class="column-count">{{ floatingTasks.length }}</span>
           </div>
         </div>
@@ -108,6 +110,7 @@
                 @click="handleTaskClick(task.id)"
                 @complete="handleTaskComplete(task.id)"
                 @snooze="handleTaskSnooze(task.id)"
+                @schedule="handleTaskClick(task.id)"
                 @delete="handleTaskDelete(task.id)"
               />
             </div>
@@ -129,9 +132,13 @@
         class="kanban-column"
         :class="column.status"
       >
-        <div class="column-header" @click="toggleColumn(column.status)">
+        <div class="column-header">
           <div class="column-title">
-            <el-icon class="expand-icon" :class="{ 'is-expanded': getColumnExpanded(column.status) }">
+            <el-icon
+              class="expand-icon"
+              :class="{ 'is-expanded': getColumnExpanded(column.status) }"
+              @click="toggleColumn(column.status)"
+            >
               <ArrowRight />
             </el-icon>
             <span class="column-icon">{{ column.icon }}</span>
@@ -166,6 +173,7 @@
               @click="handleTaskClick(task.id)"
               @complete="handleTaskComplete(task.id)"
               @snooze="handleTaskSnooze(task.id)"
+              @schedule="handleTaskClick(task.id)"
               @delete="handleTaskDelete(task.id)"
             />
           </div>
@@ -227,7 +235,7 @@
         </div>
       </div>
 
-      <el-table :data="filteredTasks" style="width: 100%" @selection-change="handleSelectionChange">
+      <el-table :data="filteredActiveTasks" style="width: 100%" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" />
         <el-table-column prop="title" label="任务标题" min-width="200">
           <template #default="scope">
@@ -293,6 +301,7 @@
 
     <!-- Tree View -->
     <div v-else-if="viewMode === 'tree'" class="tree-view">
+      <!-- Regular Projects -->
       <div
         v-for="project in projectTreeData"
         :key="project.id"
@@ -317,7 +326,7 @@
                 添加任务
               </el-button>
               <el-button
-                v-if="project.name !== '未分配任务'"
+                v-if="project.id !== '1'"
                 size="small"
                 text
                 @click.stop="handleEditProject(project.id)"
@@ -326,7 +335,7 @@
                 编辑
               </el-button>
               <el-button
-                v-if="project.name !== '未分配任务'"
+                v-if="project.id !== '1'"
                 size="small"
                 text
                 type="danger"
@@ -396,20 +405,20 @@
         </transition>
       </div>
 
-      <!-- Tasks without project -->
-      <div v-if="tasksWithoutProject.length > 0" class="project-tree-node">
-        <div class="project-header" @click="toggleProjectExpand('no-project')">
-          <el-icon class="expand-icon" :class="{ 'is-expanded': noProjectExpanded }">
+      <!-- Completed Tasks (System Project Node - always at the end, always visible) -->
+      <div class="project-tree-node system-project completed-project">
+        <div class="project-header" @click="toggleProjectExpand('completed')">
+          <el-icon class="expand-icon" :class="{ 'is-expanded': completedProjectExpanded }">
             <ArrowRight />
           </el-icon>
-          <span class="project-name">未分配项目</span>
-          <span class="project-task-count">{{ tasksWithoutProject.length }} 个任务</span>
+          <span class="project-name">✅ 已完成</span>
+          <span class="project-task-count">{{ completedTasks.length }} 个任务</span>
         </div>
 
         <transition name="slide-down">
-          <div v-show="noProjectExpanded" class="project-tasks">
+          <div v-show="completedProjectExpanded" class="project-tasks">
             <div
-              v-for="task in tasksWithoutProject"
+              v-for="task in completedTasks"
               :key="task.id"
               class="tree-task-item"
             >
@@ -419,34 +428,29 @@
                 @click.stop
               />
               <div class="task-content" @click="handleTaskClick(task.id)">
-                <span class="task-title" :class="{ 'task-completed': task.completed }">
+                <span class="task-title task-completed">
                   {{ task.title }}
                 </span>
                 <div class="task-meta">
-                  <el-tag
-                    v-if="task.status !== 'pending'"
-                    size="small"
-                    :type="task.status === 'completed' ? 'success' : task.status === 'in_progress' ? 'warning' : 'info'"
-                  >
-                    {{ getStatusLabel(task.status) }}
+                  <el-tag size="small" type="success">
+                    已完成
                   </el-tag>
                   <el-rate v-model="task.priority" disabled :max="5" size="small" />
-                  <span v-if="task.dueDate" class="due-date" :class="getDueDateClass(task.dueDate)">
-                    {{ formatDueDate(task.dueDate) }}
+                  <span v-if="task.project" class="task-project-tag">
+                    <span class="project-dot" :style="{ backgroundColor: task.project.color }"></span>
+                    {{ task.project.name }}
                   </span>
                 </div>
               </div>
               <div class="task-actions">
-                <el-button size="small" text @click.stop="handleTaskSnooze(task.id)">
-                  <el-icon><Clock /></el-icon>
-                </el-button>
-                <el-button size="small" text @click.stop="handleTaskClick(task.id)">
-                  <el-icon><Edit /></el-icon>
-                </el-button>
                 <el-button size="small" text type="danger" @click.stop="handleTaskDelete(task.id)">
                   <el-icon><Delete /></el-icon>
                 </el-button>
               </div>
+            </div>
+            <div v-if="completedTasks.length === 0" class="empty-project">
+              <el-icon><DocumentAdd /></el-icon>
+              <p>暂无已完成任务</p>
             </div>
           </div>
         </transition>
@@ -630,7 +634,7 @@
           </div>
         </div>
 
-        <!-- 时长选择 (仅当浮动任务时显示) -->
+        <!-- 时长选择 (仅当未安排任务时显示) -->
         <div v-if="!currentSnoozeTask?.startTime && !currentSnoozeTask?.endTime" class="duration-selector">
           <div class="duration-label">任务时长：</div>
           <el-radio-group v-model="snoozeDuration" size="small">
@@ -669,7 +673,7 @@
           <div class="preview-title">📅 延后结果预览：</div>
           <div class="preview-content">
             <div v-if="!currentSnoozeTask.startTime && !currentSnoozeTask.endTime">
-              <!-- 浮动任务 -->
+              <!-- 未安排任务 -->
               <div class="preview-row">
                 开始：<span class="time-new">{{ formatDateTime(customSnoozeDate) }}</span>
               </div>
@@ -895,15 +899,15 @@ const showProjectDialog = ref(false)
 
 const igniting = ref(false)
 const currentSnoozeTaskId = ref<string | null>(null)
-const noProjectExpanded = ref(true)
-const floatingTasksExpanded = ref(true) // 浮动任务折叠状态
+const completedProjectExpanded = ref(true) // 已完成项目折叠状态
+const floatingTasksExpanded = ref(true) // 未安排任务折叠状态
 const pendingExpanded = ref(true) // 待办任务折叠状态
 const inProgressExpanded = ref(true) // 进行中任务折叠状态
 const overdueExpanded = ref(true) // 逾期任务折叠状态
 const completedExpanded = ref(true) // 已完成任务折叠状态
 const customSnoozeDate = ref<Date | null>(null)
 const snoozeMode = ref<'start' | 'end'>('start') // 延后模式：开始时间或结束时间
-const snoozeDuration = ref<number>(1) // 浮动任务时长（小时）
+const snoozeDuration = ref<number>(1) // 未安排任务时长（小时）
 const currentSnoozeTask = ref<ViewTask | null>(null) // 当前要延后的任务
 const editingTask = ref<Task | null>(null)
 const editingProject = ref<any>(null)
@@ -1021,6 +1025,11 @@ const filteredTasks = computed(() => {
   return tasks
 })
 
+// Filtered tasks excluding completed (for kanban and list views)
+const filteredActiveTasks = computed(() => {
+  return filteredTasks.value.filter(t => t.status !== 'completed')
+})
+
 const kanbanColumns = computed<KanbanColumn[]>(() => {
   const pendingConfig = columnSortConfig.value.pending
   const inProgressConfig = columnSortConfig.value.in_progress
@@ -1032,7 +1041,7 @@ const kanbanColumns = computed<KanbanColumn[]>(() => {
       label: '待办',
       icon: '📋',
       tasks: sortTasks(
-        filteredTasks.value.filter((t) => t.status === 'pending' && t.startTime !== null),
+        filteredActiveTasks.value.filter((t) => t.status === 'pending' && t.startTime !== null),
         pendingConfig.by,
         pendingConfig.order
       ),
@@ -1043,7 +1052,7 @@ const kanbanColumns = computed<KanbanColumn[]>(() => {
       label: '进行中',
       icon: '🚀',
       tasks: sortTasks(
-        filteredTasks.value.filter((t) => t.status === 'in_progress' && t.startTime !== null),
+        filteredActiveTasks.value.filter((t) => t.status === 'in_progress' && t.startTime !== null),
         inProgressConfig.by,
         inProgressConfig.order
       ),
@@ -1054,22 +1063,11 @@ const kanbanColumns = computed<KanbanColumn[]>(() => {
       label: '逾期',
       icon: '⚠️',
       tasks: sortTasks(
-        filteredTasks.value.filter((t) => t.status === 'overdue' && t.startTime !== null),
+        filteredActiveTasks.value.filter((t) => t.status === 'overdue' && t.startTime !== null),
         finishedConfig.by,
         finishedConfig.order
       ),
       emptyText: '暂无逾期任务'
-    },
-    {
-      status: 'finished',
-      label: '已完成',
-      icon: '✅',
-      tasks: sortTasks(
-        filteredTasks.value.filter((t) => t.status === 'completed' && t.startTime !== null),
-        finishedConfig.by,
-        finishedConfig.order
-      ),
-      emptyText: '还没有完成的任务'
     }
   ]
 })
@@ -1087,8 +1085,12 @@ const projects = computed(() => {
 
 // Project tree data with expanded state
 const projectTreeData = computed(() => {
-  return projects.value.map(project => {
-    const projectTasks = filteredTasks.value.filter(t => t.project?.id === project.id)
+  const projectData = projects.value.map(project => {
+    // For "未安排" project (ID=1), include both tasks with project_id=1 AND tasks without project
+    const projectTasks = project.id === '1'
+      ? filteredActiveTasks.value.filter(t => t.project?.id === project.id || !t.project)
+      : filteredActiveTasks.value.filter(t => t.project?.id === project.id)
+
     return {
       ...project,
       tasks: projectTasks,
@@ -1097,20 +1099,27 @@ const projectTreeData = computed(() => {
         pending: projectTasks.filter(t => t.status === 'pending').length,
         inProgress: projectTasks.filter(t => t.status === 'in_progress').length,
         overdue: projectTasks.filter(t => t.status === 'overdue').length,
-        completed: projectTasks.filter(t => t.status === 'completed').length
+        completed: 0 // No completed tasks shown in regular projects
       }
     }
   })
+
+  // Sort: "未安排" (ID=1) always first, then others
+  return projectData.sort((a, b) => {
+    if (a.id === '1') return -1
+    if (b.id === '1') return 1
+    return 0
+  })
 })
 
-// Tasks without project assignment
-const tasksWithoutProject = computed(() => {
-  return filteredTasks.value.filter(t => !t.project)
+// Completed tasks (for "已完成" system project node)
+const completedTasks = computed(() => {
+  return filteredTasks.value.filter(t => t.status === 'completed')
 })
 
 // Floating tasks (tasks without startTime)
 const floatingTasks = computed(() => {
-  return filteredTasks.value.filter(t => !t.startTime && !t.completed)
+  return filteredActiveTasks.value.filter(t => !t.startTime)
 })
 
 // ============================================
@@ -1159,8 +1168,8 @@ function handleSearch() {
 
 function handleQuickCreate() {
   editingTask.value = null
-  // Set default project to "未分配任务" (id: 1)
-  const defaultProject = projects.value.find(p => p.name === '未分配任务')
+  // Set default project to "未安排" (id: 1)
+  const defaultProject = projects.value.find(p => p.name === '未安排')
   taskForm.value = {
     title: '',
     description: '',
@@ -1269,7 +1278,7 @@ function handleTaskSnooze(taskId: string) {
   if (currentSnoozeTask.value?.startTime && currentSnoozeTask.value?.endTime) {
     snoozeMode.value = 'start'  // 有时间任务默认延后开始时间（保持时长）
   }
-  snoozeDuration.value = 1  // 浮动任务默认1小时
+  snoozeDuration.value = 1  // 未安排任务默认1小时
 
   showSnoozeDialog.value = true
 }
@@ -1379,6 +1388,38 @@ async function handleBatchComplete() {
     clearSelection()
   } catch (error) {
     ElMessage.error('批量完成任务失败')
+  }
+}
+
+async function handleCompleteOverdueTasks() {
+  // Get all overdue tasks from the overdue column
+  const overdueTasks = filteredActiveTasks.value.filter((t) => t.status === 'overdue' && t.startTime !== null)
+
+  if (overdueTasks.length === 0) {
+    ElMessage.info('暂无逾期任务')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要将 ${overdueTasks.length} 个逾期任务标记为已完成吗？`,
+      '批量完成',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    const promises = overdueTasks.map(task =>
+      taskStore.updateTask(Number(task.id), { status: 'completed' })
+    )
+    await Promise.all(promises)
+    ElMessage.success(`成功完成 ${overdueTasks.length} 个任务`)
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('批量完成任务失败')
+    }
   }
 }
 
@@ -1523,7 +1564,7 @@ function calculateNewEndTime(): Date | null {
   const task = currentSnoozeTask.value
   const snoozeUntil = customSnoozeDate.value
 
-  // 浮动任务：开始时间 + 用户选择的时长
+  // 未安排任务：开始时间 + 用户选择的时长
   if (!task.startTime && !task.endTime) {
     const endTime = new Date(snoozeUntil)
     endTime.setHours(endTime.getHours() + snoozeDuration.value)
@@ -1606,8 +1647,8 @@ function getStatusLabel(status: string): string {
 }
 
 function toggleProjectExpand(projectId: string) {
-  if (projectId === 'no-project') {
-    noProjectExpanded.value = !noProjectExpanded.value
+  if (projectId === 'completed') {
+    completedProjectExpanded.value = !completedProjectExpanded.value
     return
   }
 
@@ -1839,7 +1880,7 @@ function handleEditProject(projectId: string) {
 
 async function handleDeleteProject(projectId: string) {
   try {
-    await ElMessageBox.confirm('确定要删除这个项目吗?项目下的任务将移至"未分配任务"', '确认删除', {
+    await ElMessageBox.confirm('确定要删除这个项目吗?项目下的任务将移至"未安排"', '确认删除', {
       confirmButtonText: '删除',
       cancelButtonText: '取消',
       type: 'warning'
@@ -1956,7 +1997,7 @@ onMounted(() => {
 // ============================================
 .kanban-view {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: $spacing-lg;
   align-items: start;
 }
@@ -2037,12 +2078,7 @@ onMounted(() => {
     padding: $spacing-lg;
     border-bottom: 1px solid $color-border;
     transition: background-color $transition-fast;
-    cursor: pointer;
     user-select: none;
-
-    &:hover {
-      background-color: rgba($color-text-primary, 0.03);
-    }
 
     .column-title {
       display: flex;
@@ -2056,6 +2092,11 @@ onMounted(() => {
         transition: transform $transition-fast, color $transition-fast;
         flex-shrink: 0;
         font-size: 16px;
+        cursor: pointer;
+
+        &:hover {
+          color: $color-primary;
+        }
 
         &.is-expanded {
           transform: rotate(90deg);
@@ -2752,6 +2793,48 @@ onMounted(() => {
     p {
       margin: 0;
       font-size: $font-size-sm;
+    }
+  }
+
+  // Unassigned project specific styles (always first)
+  &.unassigned-project {
+    background-color: rgba($color-text-secondary, 0.02);
+    border-left: 3px solid $color-text-secondary;
+
+    .project-name {
+      color: $color-text-secondary;
+      font-weight: 600;
+    }
+  }
+
+  // Completed project specific styles (always last)
+  &.completed-project {
+    background-color: rgba($color-success, 0.02);
+    border-left: 3px solid $color-success;
+
+    .project-name {
+      color: $color-success;
+    }
+
+    .task-project-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: $font-size-xs;
+      color: $color-text-secondary;
+
+      .project-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+      }
+    }
+  }
+
+  // System project (cannot be edited/deleted)
+  &.system-project {
+    .project-header {
+      cursor: pointer;
     }
   }
 }

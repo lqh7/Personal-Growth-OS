@@ -38,15 +38,9 @@ def count_tasks(
     if status is not None:
         query = query.filter(Task.status == status)
 
-    if not include_snoozed:
-        # Exclude tasks that are snoozed (snooze_until is in the future)
-        # Uses local time to match frontend timezone (前端时间为准)
-        query = query.filter(
-            or_(
-                Task.snooze_until.is_(None),
-                Task.snooze_until <= datetime.now()
-            )
-        )
+    # Note: include_snoozed parameter is deprecated
+    # Tasks should never be hidden from view
+    # Snooze functionality now modifies start_time/end_time directly
 
     return query.count()
 
@@ -78,15 +72,9 @@ def get_tasks(
     if status is not None:
         query = query.filter(Task.status == status)
 
-    if not include_snoozed:
-        # Exclude tasks that are snoozed (snooze_until is in the future)
-        # Uses local time to match frontend timezone (前端时间为准)
-        query = query.filter(
-            or_(
-                Task.snooze_until.is_(None),
-                Task.snooze_until <= datetime.now()
-            )
-        )
+    # Note: include_snoozed parameter is deprecated
+    # Tasks should never be hidden from view
+    # Snooze functionality now modifies start_time/end_time directly
 
     return query.offset(skip).limit(limit).all()
 

@@ -129,14 +129,25 @@ export const useTaskStore = defineStore('task', () => {
     }
   }
 
-  async function snoozeTask(taskId: number, snoozeUntil: string): Promise<Task> {
+  async function snoozeTask(
+    taskId: number,
+    snoozeUntil: string,
+    mode: 'start' | 'end' = 'start',
+    durationHours?: number
+  ): Promise<Task> {
     loading.value = true
     error.value = null
 
     try {
-      const response = await apiClient.post(`/tasks/${taskId}/snooze`, null, {
-        params: { snooze_until: snoozeUntil }
-      })
+      const params: any = {
+        snooze_until: snoozeUntil,
+        mode: mode
+      }
+      if (durationHours !== undefined) {
+        params.duration_hours = durationHours
+      }
+
+      const response = await apiClient.post(`/tasks/${taskId}/snooze`, null, { params })
       const index = tasks.value.findIndex(t => t.id === taskId)
       if (index !== -1) {
         tasks.value[index] = response.data
