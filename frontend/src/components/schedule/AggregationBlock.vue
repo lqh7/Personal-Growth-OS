@@ -146,7 +146,7 @@ function formatTaskTime(task: Task): string {
 </script>
 
 <style scoped lang="scss">
-$color-aggregation: #e5e7eb;
+$color-aggregation: #2d3748;
 $color-priority-high: #ef4444;
 $color-priority-medium: #3b82f6;
 $color-priority-low: #10b981;
@@ -182,7 +182,7 @@ $font-size-sm: 14px;
   justify-content: center;
 
   &:hover {
-    background-color: darken($color-aggregation, 5%);
+    background-color: lighten($color-aggregation, 10%);
   }
 
   // Small block: no padding for height < 10px
@@ -204,7 +204,7 @@ $font-size-sm: 14px;
   .all-task-titles {
     font-size: 10px;
     font-weight: 500;
-    color: $color-text-primary;
+    color: white;
     line-height: 1.4;
     overflow: hidden;
     text-overflow: ellipsis;

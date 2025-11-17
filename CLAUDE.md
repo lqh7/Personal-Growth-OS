@@ -170,6 +170,9 @@ cd backend && rm -f personal_growth_os.db && cd ..
 - `clear_tasks.py` - Clear all tasks from database (useful for testing)
 - `check_encoding.py` - Verify UTF-8 encoding in database
 - `debug_snooze.py` / `debug_snooze_display.py` - Debug snooze functionality
+- `generate_test_tasks.py` - Generate sample tasks for testing
+- `reset_and_start.py` - Reset database and start fresh
+- `migrate_system_project.py` - Database migration for system project protection
 
 **Note**: This project includes Windows-specific command syntax in many places. When working on Windows, use the Windows commands provided. On Linux/Mac, use the alternative commands shown.
 
@@ -470,10 +473,27 @@ The project includes a specialized Claude Code agent for testing:
 
 **No Formal Test Suite**: The project currently relies on manual testing and the test-validator agent. There is no pytest or vitest configuration.
 
+**Integration Testing Scripts** (project root):
+- `run_tests.py` - Lightweight integration tests for core API functionality
+- `test_integration.py` - Comprehensive end-to-end tests covering all features
+
+Run integration tests:
+```bash
+# Ensure backend is running first
+python run_tests.py
+# Or the comprehensive version:
+python test_integration.py
+```
+
 ## Documentation
 
 Project documentation files:
 - `/doc/需求.md` - Requirements and feature specifications (Chinese)
+- `/doc/工程架构.md` - Engineering architecture overview
+- `/doc/Agent详细设计.md` - Detailed AI agent design patterns
+- `/doc/后端详细设计.md` - Backend detailed design
+- `/doc/前端详细设计.md` - Frontend detailed design
+- `/doc/日程表详细设计.md` - Schedule view implementation details
 - `LANGGRAPH_ARCHITECTURE.md` - LangGraph implementation guide (English)
 - `README.md` - Project overview and quick start
 - `QUICKSTART.md` - Step-by-step setup guide

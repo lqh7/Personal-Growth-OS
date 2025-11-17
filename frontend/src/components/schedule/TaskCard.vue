@@ -9,7 +9,7 @@
     <template #reference>
       <div
         class="task-card"
-        :class="[priorityClass, { 'truncated-top': isTruncatedTop, 'truncated-bottom': isTruncatedBottom, 'small-card': isSmallCard }]"
+        :class="[{ 'truncated-top': isTruncatedTop, 'truncated-bottom': isTruncatedBottom, 'small-card': isSmallCard }]"
         :style="cardStyle"
         @click="$emit('task-click', task)"
       >
@@ -91,11 +91,13 @@ const emit = defineEmits<{
 // Computed
 // ============================================
 
-const priorityClass = computed(() => {
+const taskBackgroundColor = computed(() => {
+  return props.task.project?.color || '#667eea' // 默认紫色
+})
+
+const taskOpacity = computed(() => {
   const priority = props.task.priority
-  if (priority >= 4) return 'priority-high'
-  if (priority >= 2) return 'priority-medium'
-  return 'priority-low'
+  return 0.25 + (priority * 0.15)
 })
 
 const isTruncatedTop = computed(() => {
@@ -125,7 +127,9 @@ const isSmallCard = computed(() => {
 const cardStyle = computed(() => {
   return {
     top: `${props.top}px`,
-    height: `${props.height}px`
+    height: `${props.height}px`,
+    backgroundColor: taskBackgroundColor.value,
+    opacity: taskOpacity.value
   }
 })
 
@@ -199,19 +203,6 @@ $font-size-sm: 14px;
     box-shadow: $shadow-md;
     transform: translateY(-1px);
     z-index: 2;
-  }
-
-  // Priority colors (full background)
-  &.priority-high {
-    background-color: $color-priority-high;
-  }
-
-  &.priority-medium {
-    background-color: $color-priority-medium;
-  }
-
-  &.priority-low {
-    background-color: $color-priority-low;
   }
 
   // Small card: no padding for height < 10px

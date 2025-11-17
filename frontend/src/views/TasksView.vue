@@ -109,7 +109,7 @@
                 variant="default"
                 @click="handleTaskClick(task.id)"
                 @snooze="handleTaskSnooze(task.id)"
-                @schedule="handleTaskClick(task.id)"
+                @schedule="handleTaskSchedule(task.id)"
                 @delete="handleTaskDelete(task.id)"
               />
             </div>
@@ -117,7 +117,7 @@
             <!-- Empty State -->
             <div v-if="floatingTasks.length === 0" class="floating-tasks-empty">
               <el-icon class="empty-icon"><Calendar /></el-icon>
-              <p class="empty-title">暂无待办任务</p>
+              <p class="empty-title">暂无未安排任务</p>
               <p class="empty-hint">创建任务时不指定时间，任务将出现在这里</p>
             </div>
           </div>
@@ -172,7 +172,7 @@
               @click="handleTaskClick(task.id)"
               @complete="handleTaskComplete(task.id)"
               @snooze="handleTaskSnooze(task.id)"
-              @schedule="handleTaskClick(task.id)"
+              @schedule="handleTaskSchedule(task.id)"
               @delete="handleTaskDelete(task.id)"
             />
           </div>
@@ -267,7 +267,10 @@
         <el-table-column label="操作" width="200">
           <template #default="scope">
             <el-button-group size="small">
-              <el-button @click="handleTaskSnooze(scope.row.id)">延后</el-button>
+              <!-- 未安排任务显示"安排"按钮 -->
+              <el-button v-if="!scope.row.startTime" @click="handleTaskSchedule(scope.row.id)">安排</el-button>
+              <!-- 已安排任务显示"延后"按钮 -->
+              <el-button v-else @click="handleTaskSnooze(scope.row.id)">延后</el-button>
               <el-button @click="handleTaskClick(scope.row.id)">编辑</el-button>
               <el-button type="danger" @click="handleTaskDelete(scope.row.id)">删除</el-button>
             </el-button-group>
@@ -328,7 +331,12 @@
                 </div>
               </div>
               <div class="task-actions">
-                <el-button size="small" text @click.stop="handleTaskSnooze(task.id)">
+                <!-- 未安排任务显示"安排"按钮 -->
+                <el-button v-if="!task.startTime" size="small" text @click.stop="handleTaskSchedule(task.id)">
+                  <el-icon><Calendar /></el-icon>
+                </el-button>
+                <!-- 已安排任务显示"延后"按钮 -->
+                <el-button v-else size="small" text @click.stop="handleTaskSnooze(task.id)">
                   <el-icon><Clock /></el-icon>
                 </el-button>
                 <el-button size="small" text type="danger" @click.stop="handleTaskDelete(task.id)">
@@ -424,7 +432,12 @@
                 </div>
               </div>
               <div class="task-actions">
-                <el-button size="small" text @click.stop="handleTaskSnooze(task.id)">
+                <!-- 未安排任务显示"安排"按钮 -->
+                <el-button v-if="!task.startTime" size="small" text @click.stop="handleTaskSchedule(task.id)">
+                  <el-icon><Calendar /></el-icon>
+                </el-button>
+                <!-- 已安排任务显示"延后"按钮 -->
+                <el-button v-else size="small" text @click.stop="handleTaskSnooze(task.id)">
                   <el-icon><Clock /></el-icon>
                 </el-button>
                 <el-button size="small" text @click.stop="handleTaskClick(task.id)">
@@ -647,6 +660,72 @@
         <el-button @click="showIgnitionResult = false">稍后处理</el-button>
         <el-button type="primary" @click="handleConfirmIgnition">
           确认并创建任务
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Schedule Dialog (安排任务时间) -->
+    <el-dialog v-model="showScheduleDialog" title="安排任务时间" width="520px">
+      <div class="schedule-options">
+        <div class="schedule-hint">
+          <el-icon><InfoFilled /></el-icon>
+          为未安排的任务设置开始时间和结束时间
+        </div>
+
+        <!-- 时长选择 -->
+        <div class="duration-selector">
+          <div class="duration-label">任务时长：</div>
+          <el-radio-group v-model="scheduleDuration" size="small">
+            <el-radio :label="0.5">30分钟</el-radio>
+            <el-radio :label="1">1小时</el-radio>
+            <el-radio :label="2">2小时</el-radio>
+            <el-radio :label="3">3小时</el-radio>
+          </el-radio-group>
+        </div>
+
+        <el-divider>选择开始时间</el-divider>
+
+        <el-date-picker
+          v-model="scheduleStartTime"
+          type="datetime"
+          placeholder="选择开始时间（必填）"
+          style="width: 100%"
+          :disabled-date="disablePastDates"
+        />
+
+        <el-divider>选择结束时间（可选）</el-divider>
+
+        <el-date-picker
+          v-model="scheduleEndTime"
+          type="datetime"
+          placeholder="默认为开始时间+设定时长"
+          style="width: 100%"
+        />
+
+        <!-- 安排结果预览 -->
+        <div v-if="scheduleStartTime" class="schedule-preview">
+          <div class="preview-title">📅 安排结果预览：</div>
+          <div class="preview-content">
+            <div class="preview-row">
+              开始：<span class="time-new">{{ formatDateTime(scheduleStartTime) }}</span>
+            </div>
+            <div class="preview-row">
+              结束：<span class="time-new">{{ formatDateTime(calculateScheduleEndTime()) }}</span>
+            </div>
+            <div class="preview-row">
+              时长：<span class="time-new">{{ calculateScheduleDuration() }}小时</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="showScheduleDialog = false">取消</el-button>
+        <el-button
+          type="primary"
+          @click="confirmSchedule"
+          :disabled="!scheduleStartTime"
+        >
+          确认安排
         </el-button>
       </template>
     </el-dialog>
@@ -959,6 +1038,7 @@ import {
   DocumentAdd,
   MoreFilled,
   InfoFilled,
+  SuccessFilled,
   Clock,
   Timer,
   FolderAdd,
@@ -1042,6 +1122,7 @@ const columnSortConfig = ref<Record<string, { by: 'priority' | 'dueDate' | null;
 const showIgniteDialog = ref(false)
 const showIgnitionResult = ref(false)
 const showSnoozeDialog = ref(false)
+const showScheduleDialog = ref(false) // 安排时间对话框
 const showTaskDialog = ref(false)
 const showProjectDialog = ref(false)
 const showCompleteDialog = ref(false)
@@ -1049,6 +1130,7 @@ const showCompletedTaskDialog = ref(false)
 
 const igniting = ref(false)
 const currentSnoozeTaskId = ref<string | null>(null)
+const currentScheduleTaskId = ref<string | null>(null) // 当前要安排的任务ID
 const currentCompleteTaskId = ref<string | null>(null)
 const completionNotes = ref('')
 const currentCompletedTask = ref<Task | null>(null)
@@ -1064,6 +1146,9 @@ const customSnoozeDate = ref<Date | null>(null)
 const snoozeMode = ref<'start' | 'end'>('start') // 延后模式：开始时间或结束时间
 const snoozeDuration = ref<number>(1) // 未安排任务时长（小时）
 const currentSnoozeTask = ref<ViewTask | null>(null) // 当前要延后的任务
+const scheduleStartTime = ref<Date | null>(null) // 安排对话框：开始时间
+const scheduleEndTime = ref<Date | null>(null) // 安排对话框：结束时间
+const scheduleDuration = ref<number>(1) // 安排对话框：任务时长（小时）
 const editingTask = ref<Task | null>(null)
 const editingProject = ref<any>(null)
 const projectExpandState = ref<Record<string, boolean>>({}) // 项目展开状态
@@ -1118,7 +1203,7 @@ const snoozeOptions = [
 // Computed
 // ============================================
 const stats = computed(() => ({
-  pending: allTasks.value.filter((t) => t.status === 'pending').length,
+  pending: allTasks.value.filter((t) => t.status === 'pending' && t.startTime).length,
   inProgress: allTasks.value.filter((t) => t.status === 'in_progress').length,
   overdue: allTasks.value.filter((t) => t.status === 'overdue').length,
   completed: allTasks.value.filter((t) => t.status === 'completed').length
@@ -1196,7 +1281,7 @@ const kanbanColumns = computed<KanbanColumn[]>(() => {
       label: '待办',
       icon: '📋',
       tasks: sortTasks(
-        filteredActiveTasks.value.filter((t) => t.status === 'pending' && t.startTime !== null),
+        filteredActiveTasks.value.filter((t) => t.status === 'pending' && t.startTime),
         pendingConfig.by,
         pendingConfig.order
       ),
@@ -1207,7 +1292,7 @@ const kanbanColumns = computed<KanbanColumn[]>(() => {
       label: '进行中',
       icon: '🚀',
       tasks: sortTasks(
-        filteredActiveTasks.value.filter((t) => t.status === 'in_progress' && t.startTime !== null),
+        filteredActiveTasks.value.filter((t) => t.status === 'in_progress' && t.startTime),
         inProgressConfig.by,
         inProgressConfig.order
       ),
@@ -1218,7 +1303,7 @@ const kanbanColumns = computed<KanbanColumn[]>(() => {
       label: '逾期',
       icon: '⚠️',
       tasks: sortTasks(
-        filteredActiveTasks.value.filter((t) => t.status === 'overdue' && t.startTime !== null),
+        filteredActiveTasks.value.filter((t) => t.status === 'overdue' && t.startTime),
         finishedConfig.by,
         finishedConfig.order
       ),
@@ -1457,6 +1542,58 @@ async function confirmComplete() {
   } catch (error) {
     ElMessage.error('更新任务状态失败')
   }
+}
+
+function handleTaskSchedule(taskId: string) {
+  currentScheduleTaskId.value = taskId
+  scheduleStartTime.value = null
+  scheduleEndTime.value = null
+  scheduleDuration.value = 1  // 默认1小时
+  showScheduleDialog.value = true
+}
+
+async function confirmSchedule() {
+  if (!scheduleStartTime.value || !currentScheduleTaskId.value) return
+
+  const startTime = scheduleStartTime.value
+  const endTime = scheduleEndTime.value || calculateScheduleEndTime()
+
+  try {
+    await taskStore.updateTask(Number(currentScheduleTaskId.value), {
+      start_time: formatLocalDateTime(startTime),
+      end_time: formatLocalDateTime(endTime)
+    })
+    ElMessage.success(`任务已安排至 ${formatDateTime(startTime)}`)
+    await loadTasks()
+  } catch (error) {
+    ElMessage.error('安排任务失败')
+  }
+
+  showScheduleDialog.value = false
+  currentScheduleTaskId.value = null
+  scheduleStartTime.value = null
+  scheduleEndTime.value = null
+}
+
+// 计算安排对话框的结束时间
+function calculateScheduleEndTime(): Date {
+  if (!scheduleStartTime.value) return new Date()
+  if (scheduleEndTime.value) return scheduleEndTime.value
+
+  const endTime = new Date(scheduleStartTime.value)
+  // 使用分钟计算，以支持半小时（0.5小时 = 30分钟）
+  const minutesToAdd = scheduleDuration.value * 60
+  endTime.setMinutes(endTime.getMinutes() + minutesToAdd)
+  return endTime
+}
+
+// 计算安排对话框的时长
+function calculateScheduleDuration(): number {
+  if (!scheduleStartTime.value) return scheduleDuration.value
+
+  const endTime = calculateScheduleEndTime()
+  const duration = (endTime.getTime() - scheduleStartTime.value.getTime()) / (1000 * 60 * 60)
+  return Math.round(duration * 10) / 10  // 保留1位小数
 }
 
 function handleTaskSnooze(taskId: string) {
@@ -2790,6 +2927,64 @@ onMounted(() => {
       color: $color-text-secondary;
       line-height: 1.5;
       @include text-ellipsis-multiline(2);
+    }
+  }
+}
+
+// ============================================
+// Schedule Dialog (安排任务时间)
+// ============================================
+.schedule-options {
+  .schedule-hint {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    padding: $spacing-md;
+    background-color: rgba($color-primary, 0.1);
+    border-radius: $radius-md;
+    margin-bottom: $spacing-lg;
+    font-size: $font-size-sm;
+    color: $color-primary;
+  }
+
+  .duration-selector {
+    margin-bottom: $spacing-lg;
+    padding: $spacing-md;
+    background-color: #f8f9fa;
+    border-radius: $radius-md;
+
+    .duration-label {
+      font-size: $font-size-sm;
+      font-weight: 500;
+      color: $color-text-secondary;
+      margin-bottom: $spacing-sm;
+    }
+  }
+
+  .schedule-preview {
+    margin-top: $spacing-md;
+    padding: $spacing-md;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: $radius-md;
+    color: white;
+
+    .preview-title {
+      font-weight: 600;
+      margin-bottom: $spacing-sm;
+      font-size: $font-size-md;
+    }
+
+    .preview-content {
+      .preview-row {
+        margin-bottom: $spacing-xs;
+        font-size: $font-size-sm;
+        line-height: 1.6;
+
+        .time-new {
+          color: #ffd700;
+          font-weight: 600;
+        }
+      }
     }
   }
 }

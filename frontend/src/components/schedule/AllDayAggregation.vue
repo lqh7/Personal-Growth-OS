@@ -133,7 +133,7 @@ function formatTaskTime(task: Task): string {
 </script>
 
 <style scoped lang="scss">
-$color-aggregation: #e5e7eb;
+$color-aggregation: #2d3748;
 $color-priority-high: #ef4444;
 $color-priority-medium: #3b82f6;
 $color-priority-low: #10b981;
@@ -165,7 +165,7 @@ $font-size-sm: 14px;
   position: relative;
 
   &:hover {
-    background-color: darken($color-aggregation, 5%);
+    background-color: lighten($color-aggregation, 10%);
   }
 
   .aggregation-content {
@@ -179,7 +179,7 @@ $font-size-sm: 14px;
   .all-task-titles {
     font-size: 10px;
     font-weight: 500;
-    color: $color-text-primary;
+    color: white;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

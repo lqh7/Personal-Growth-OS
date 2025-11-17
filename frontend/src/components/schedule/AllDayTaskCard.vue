@@ -9,7 +9,7 @@
     <template #reference>
       <div
         class="allday-task-card"
-        :class="priorityClass"
+        :style="taskStyle"
         @click="$emit('task-click', task)"
       >
         <span class="task-title">{{ task.title }}</span>
@@ -80,11 +80,13 @@ const emit = defineEmits<{
 // Computed
 // ============================================
 
-const priorityClass = computed(() => {
-  const priority = props.task.priority
-  if (priority >= 4) return 'priority-high'
-  if (priority >= 2) return 'priority-medium'
-  return 'priority-low'
+const taskStyle = computed(() => {
+  const backgroundColor = props.task.project?.color || '#667eea' // 默认紫色
+  const opacity = 0.25 + (props.task.priority * 0.15)
+  return {
+    backgroundColor,
+    opacity
+  }
 })
 
 const formatDateTime = (date: Date) => {
@@ -142,19 +144,6 @@ $font-size-sm: 14px;
   &:hover {
     opacity: 0.9;
     transform: translateY(-1px);
-  }
-
-  // Priority colors (full background)
-  &.priority-high {
-    background-color: $color-priority-high;
-  }
-
-  &.priority-medium {
-    background-color: $color-priority-medium;
-  }
-
-  &.priority-low {
-    background-color: $color-priority-low;
   }
 
   .task-title {
