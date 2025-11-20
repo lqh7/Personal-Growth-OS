@@ -11,7 +11,7 @@
         </div>
       </div>
       <div class="header-actions">
-        <el-button type="primary" @click="showCreateDialog = true">
+        <el-button type="primary" @click="openCreateDialog">
           <el-icon><Plus /></el-icon>
           创建笔记
         </el-button>
@@ -21,13 +21,16 @@
     <!-- Filters Bar -->
     <div class="filters-bar">
       <div class="filters-left">
-        <el-input
+        <!-- Search with History Dropdown -->
+        <el-autocomplete
           v-model="searchQuery"
-          placeholder="语义搜索笔记..."
+          :fetch-suggestions="querySearchHistory"
+          placeholder="搜索笔记标题和内容..."
           clearable
-          style="width: 300px"
+          style="width: 280px"
           @keyup.enter="handleSearch"
           @clear="clearSearch"
+          @select="handleHistorySelect"
         >
           <template #prefix>
             <el-icon><Search /></el-icon>
@@ -37,7 +40,37 @@
               搜索
             </el-button>
           </template>
-        </el-input>
+          <template #default="{ item }">
+            <div class="history-item">
+              <el-icon><Clock /></el-icon>
+              <span>{{ item.value }}</span>
+              <span class="result-count">{{ item.result_count }}个结果</span>
+            </div>
+          </template>
+        </el-autocomplete>
+
+        <!-- 项目筛选器(新增) -->
+        <el-select
+          v-model="selectedProjects"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          placeholder="按项目筛选"
+          clearable
+          style="width: 180px"
+        >
+          <el-option
+            v-for="project in projectStore.projects"
+            :key="project.id"
+            :label="project.name"
+            :value="project.id"
+          >
+            <span class="project-option">
+              <span class="project-color-dot" :style="{ backgroundColor: project.color }"></span>
+              {{ project.name }}
+            </span>
+          </el-option>
+        </el-select>
 
         <el-select
           v-model="selectedTags"
@@ -46,7 +79,7 @@
           collapse-tags-tooltip
           placeholder="按标签筛选"
           clearable
-          style="width: 240px"
+          style="width: 180px"
         >
           <el-option
             v-for="tag in noteStore.tags"
@@ -61,23 +94,51 @@
           </el-option>
         </el-select>
 
-        <el-select v-model="sortBy" placeholder="排序" style="width: 150px">
-          <el-option label="最新更新" value="updated_at" />
-          <el-option label="最早创建" value="created_at" />
-          <el-option label="标题 A-Z" value="title" />
+        <el-select v-model="sortBy" placeholder="排序" style="width: 140px">
+          <el-option label="最新更新" value="updated_at_desc" />
+          <el-option label="最早更新" value="updated_at_asc" />
+          <el-option label="最新创建" value="created_at_desc" />
+          <el-option label="标题 A-Z" value="title_asc" />
+          <el-option label="标题 Z-A" value="title_desc" />
         </el-select>
+
+        <!-- Quick Filters (Iteration 1) -->
+        <el-button-group>
+          <el-button
+            :type="quickFilter === 'pinned' ? 'primary' : ''"
+            @click="toggleQuickFilter('pinned')"
+          >
+            📌 置顶
+            <el-badge v-if="pinnedCount > 0" :value="pinnedCount" class="quick-filter-badge" />
+          </el-button>
+          <el-button
+            :type="quickFilter === 'favorited' ? 'primary' : ''"
+            @click="toggleQuickFilter('favorited')"
+          >
+            ⭐ 收藏
+            <el-badge v-if="favoritedCount > 0" :value="favoritedCount" class="quick-filter-badge" />
+          </el-button>
+          <el-button
+            :type="quickFilter === 'recent' ? 'primary' : ''"
+            @click="toggleQuickFilter('recent')"
+          >
+            🕒 最近
+          </el-button>
+        </el-button-group>
       </div>
 
       <div class="filters-right">
         <el-button-group>
-          <el-button :type="viewMode === 'grid' ? 'primary' : ''" @click="viewMode = 'grid'">
-            <el-icon><Grid /></el-icon>
-            网格
-          </el-button>
-          <el-button :type="viewMode === 'list' ? 'primary' : ''" @click="viewMode = 'list'">
-            <el-icon><List /></el-icon>
-            列表
-          </el-button>
+          <el-tooltip content="网格视图">
+            <el-button :type="viewMode === 'grid' ? 'primary' : ''" @click="viewMode = 'grid'">
+              <el-icon><Grid /></el-icon>
+            </el-button>
+          </el-tooltip>
+          <el-tooltip content="列表视图">
+            <el-button :type="viewMode === 'list' ? 'primary' : ''" @click="viewMode = 'list'">
+              <el-icon><List /></el-icon>
+            </el-button>
+          </el-tooltip>
         </el-button-group>
       </div>
     </div>
@@ -125,6 +186,19 @@
       </div>
     </div>
 
+    <!-- Template Selection Dialog -->
+    <el-dialog
+      v-model="showTemplateDialog"
+      title="选择模板"
+      width="900px"
+      top="5vh"
+    >
+      <TemplateSelector
+        @select="handleTemplateSelect"
+        @cancel="handleTemplateCanel"
+      />
+    </el-dialog>
+
     <!-- Create/Edit Dialog -->
     <el-dialog
       v-model="showCreateDialog"
@@ -142,7 +216,7 @@
             :language="'zh-CN'"
             :preview="true"
             :toolbars="editorToolbars"
-            :style="{ height: '500px' }"
+            :style="{ height: '400px' }"
           />
         </el-form-item>
         <el-form-item label="来源">
@@ -164,6 +238,16 @@
               :value="tag.name"
             />
           </el-select>
+        </el-form-item>
+
+        <!-- Attachments Section (only show when editing existing note) -->
+        <el-form-item v-if="editingNote" label="附件">
+          <AttachmentUploader
+            :note-id="editingNote.id"
+            :attachments="currentNoteAttachments"
+            @upload-success="handleAttachmentUploadSuccess"
+            @delete-success="handleAttachmentDelete"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -207,35 +291,50 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, Link, Grid, List } from '@element-plus/icons-vue'
+import { Plus, Search, Link, Grid, List, Clock } from '@element-plus/icons-vue'
 import { useNoteStore } from '@/stores/noteStore'
+import { useProjectStore } from '@/stores/projectStore'
 import NoteCard from '@/components/notes/NoteCard.vue'
-import type { Note, RelatedNote } from '@/types'
+import AttachmentUploader from '@/components/notes/AttachmentUploader.vue'
+import TemplateSelector from '@/components/notes/TemplateSelector.vue'
+import type { Note, RelatedNote, Attachment, TemplateRenderResponse } from '@/types'
 import { MdEditor, MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 
 const noteStore = useNoteStore()
+const projectStore = useProjectStore()
 
 // ============================================
 // State
 // ============================================
 const showCreateDialog = ref(false)
 const showViewDialog = ref(false)
+const showTemplateDialog = ref(false)
 const searchQuery = ref('')
 const searchResults = ref<RelatedNote[]>([])
 const editingNote = ref<Note | null>(null)
 const viewingNote = ref<Note | null>(null)
+const selectedProjects = ref<number[]>([])
 const selectedTags = ref<number[]>([])
-const sortBy = ref('updated_at')
+const sortBy = ref('updated_at_desc')
 const viewMode = ref<'grid' | 'list'>('grid')
+
+// Iteration 1: Quick filters
+const quickFilter = ref<'pinned' | 'favorited' | 'recent' | null>(null)
+const searchHistory = ref<Array<{ value: string; result_count: number }>>([])
+
+// Iteration 2: Attachments & Templates
+const currentNoteAttachments = ref<Attachment[]>([])
+const useTemplate = ref(false)
 
 const noteForm = ref({
   title: '',
   content: '',
   source_url: '',
-  tag_names: [] as string[]
+  tag_names: [] as string[],
+  template_id: undefined as number | undefined
 })
 
 // Markdown editor toolbar configuration
@@ -274,6 +373,24 @@ const editorToolbars = [
 const filteredNotes = computed(() => {
   let notes = [...noteStore.notes]
 
+  // Apply quick filter
+  if (quickFilter.value === 'pinned') {
+    notes = notes.filter(n => n.is_pinned)
+  } else if (quickFilter.value === 'favorited') {
+    notes = notes.filter(n => n.is_favorited)
+  } else if (quickFilter.value === 'recent') {
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    notes = notes.filter(n => new Date(n.updated_at) > sevenDaysAgo)
+  }
+
+  // Filter by projects
+  if (selectedProjects.value.length > 0) {
+    notes = notes.filter(note =>
+      note.project_id && selectedProjects.value.includes(note.project_id)
+    )
+  }
+
   // Filter by tags
   if (selectedTags.value.length > 0) {
     notes = notes.filter(note =>
@@ -283,24 +400,53 @@ const filteredNotes = computed(() => {
 
   // Sort
   notes.sort((a, b) => {
-    if (sortBy.value === 'updated_at') {
-      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-    } else if (sortBy.value === 'created_at') {
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    } else if (sortBy.value === 'title') {
-      return a.title.localeCompare(b.title)
+    switch (sortBy.value) {
+      case 'updated_at_desc':
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      case 'updated_at_asc':
+        return new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime()
+      case 'created_at_desc':
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      case 'title_asc':
+        return a.title.localeCompare(b.title, 'zh-CN')
+      case 'title_desc':
+        return b.title.localeCompare(a.title, 'zh-CN')
+      default:
+        return 0
     }
-    return 0
   })
 
   return notes
 })
 
+const pinnedCount = computed(() =>
+  noteStore.notes.filter(n => n.is_pinned).length
+)
+
+const favoritedCount = computed(() =>
+  noteStore.notes.filter(n => n.is_favorited).length
+)
+
+// Watch editing note to load attachments
+watch(editingNote, async (note) => {
+  if (note) {
+    currentNoteAttachments.value = await noteStore.fetchAttachments(note.id)
+  } else {
+    currentNoteAttachments.value = []
+  }
+})
+
 onMounted(async () => {
   await Promise.all([
     noteStore.fetchNotes(),
-    noteStore.fetchTags()
+    noteStore.fetchTags(),
+    noteStore.fetchTemplates(),
+    projectStore.fetchProjects()
   ])
+
+  // Load search history
+  const history = await noteStore.fetchSearchHistory(10)
+  searchHistory.value = history.map(h => ({ value: h.query_text, result_count: h.result_count }))
 })
 
 async function handleSearch() {
@@ -386,12 +532,63 @@ async function handleSave() {
 function closeDialog() {
   showCreateDialog.value = false
   editingNote.value = null
+  currentNoteAttachments.value = []
   noteForm.value = {
     title: '',
     content: '',
     source_url: '',
-    tag_names: []
+    tag_names: [],
+    template_id: undefined
   }
+}
+
+function openCreateDialog() {
+  useTemplate.value = noteStore.templates.length > 0
+  if (useTemplate.value) {
+    showTemplateDialog.value = true
+  } else {
+    showCreateDialog.value = true
+  }
+}
+
+function handleTemplateSelect(rendered: TemplateRenderResponse) {
+  showTemplateDialog.value = false
+  noteForm.value.title = rendered.suggested_title
+  noteForm.value.content = rendered.content
+  showCreateDialog.value = true
+}
+
+function handleTemplateCanel() {
+  showTemplateDialog.value = false
+  showCreateDialog.value = true
+}
+
+async function handleAttachmentUploadSuccess(attachment: Attachment) {
+  currentNoteAttachments.value.push(attachment)
+  ElMessage.success('附件上传成功')
+}
+
+async function handleAttachmentDelete(attachmentId: number) {
+  currentNoteAttachments.value = currentNoteAttachments.value.filter(a => a.id !== attachmentId)
+  ElMessage.success('附件已删除')
+}
+
+function toggleQuickFilter(filter: 'pinned' | 'favorited' | 'recent') {
+  quickFilter.value = quickFilter.value === filter ? null : filter
+}
+
+async function querySearchHistory(queryString: string, cb: Function) {
+  if (!queryString) {
+    const history = await noteStore.fetchSearchHistory(10)
+    cb(history.map(h => ({ value: h.query_text, result_count: h.result_count })))
+  } else {
+    cb([])
+  }
+}
+
+function handleHistorySelect(item: { value: string }) {
+  searchQuery.value = item.value
+  handleSearch()
 }
 </script>
 
@@ -464,15 +661,18 @@ function closeDialog() {
   }
 }
 
+.project-option,
 .tag-option {
   display: flex;
   align-items: center;
   gap: $spacing-sm;
 
+  .project-color-dot,
   .tag-color-dot {
     width: 10px;
     height: 10px;
     border-radius: $radius-round;
+    flex-shrink: 0;
   }
 }
 
