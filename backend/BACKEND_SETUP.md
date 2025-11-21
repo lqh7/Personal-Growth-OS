@@ -180,9 +180,9 @@ python app/main.py
 - **FastAPI** - Web框架
 - **SQLAlchemy** - ORM
 - **SQLite** - 数据库
-- **LangGraph** - AI Agent编排
+- **Agno** - AI Agent编排 (声明式配置)
 - **ChromaDB** - 向量数据库 (RAG)
-- **Mem0** - 记忆系统
+- ~~**Mem0**~~ - 记忆系统 (已移除，使用Agno内置User Memories)
 
 ## 🎯 下一步
 

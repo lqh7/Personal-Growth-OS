@@ -26,17 +26,52 @@
         v-for="template in filteredTemplates"
         :key="template.id"
         class="template-card"
-        :class="{ 'selected': selectedTemplate?.id === template.id }"
+        :class="{ 'selected': selectedTemplate?.id === template.id, 'builtin': template.is_builtin }"
         @click="selectTemplate(template)"
       >
         <div class="template-icon">{{ template.icon || '📝' }}</div>
         <div class="template-info">
-          <h4 class="template-name">{{ template.name }}</h4>
+          <h4 class="template-name">
+            {{ template.name }}
+            <el-tag v-if="template.is_builtin" size="small" type="info">内置</el-tag>
+          </h4>
           <p class="template-description">{{ template.description || '无描述' }}</p>
         </div>
         <el-icon v-if="selectedTemplate?.id === template.id" class="check-icon">
           <CircleCheck />
         </el-icon>
+
+        <!-- Template Actions (for custom templates) -->
+        <div v-if="!template.is_builtin" class="template-actions" @click.stop>
+          <el-button
+            size="small"
+            circle
+            @click="handleDuplicate(template)"
+            title="复制"
+          >
+            <el-icon><DocumentCopy /></el-icon>
+          </el-button>
+          <el-button
+            size="small"
+            circle
+            type="danger"
+            @click="handleDelete(template)"
+            title="删除"
+          >
+            <el-icon><Delete /></el-icon>
+          </el-button>
+        </div>
+        <!-- Duplicate button for built-in templates -->
+        <div v-else class="template-actions" @click.stop>
+          <el-button
+            size="small"
+            circle
+            @click="handleDuplicate(template)"
+            title="复制模板以自定义"
+          >
+            <el-icon><DocumentCopy /></el-icon>
+          </el-button>
+        </div>
       </div>
     </div>
 
@@ -62,21 +97,21 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { CircleCheck } from '@element-plus/icons-vue'
-import type { Template, TemplateRenderResponse } from '@/types'
-import apiClient from '@/api/client'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { CircleCheck, DocumentCopy, Delete } from '@element-plus/icons-vue'
+import type { TemplateRenderResponse } from '@/types'
+import type { LocalTemplate } from '@/services/templateStorage'
+import { templateStorage } from '@/services/templateStorage'
 
 const emit = defineEmits<{
   (e: 'select', rendered: TemplateRenderResponse): void
   (e: 'cancel'): void
 }>()
 
-const templates = ref<Template[]>([])
+const templates = ref<LocalTemplate[]>([])
 const categories = ref<string[]>([])
 const selectedCategory = ref<string | null>(null)
-const selectedTemplate = ref<Template | null>(null)
-const loading = ref(false)
+const selectedTemplate = ref<LocalTemplate | null>(null)
 
 const filteredTemplates = computed(() => {
   if (selectedCategory.value === null) {
@@ -85,36 +120,20 @@ const filteredTemplates = computed(() => {
   return templates.value.filter(t => t.category === selectedCategory.value)
 })
 
-onMounted(async () => {
-  await Promise.all([
-    fetchTemplates(),
-    fetchCategories()
-  ])
+onMounted(() => {
+  loadTemplates()
+  loadCategories()
 })
 
-async function fetchTemplates() {
-  try {
-    loading.value = true
-    const response = await apiClient.get('/templates/')
-    templates.value = response.data
-  } catch (error) {
-    console.error('Failed to fetch templates:', error)
-    ElMessage.error('加载模板失败')
-  } finally {
-    loading.value = false
-  }
+function loadTemplates() {
+  templates.value = templateStorage.getAllTemplates()
 }
 
-async function fetchCategories() {
-  try {
-    const response = await apiClient.get('/templates/categories')
-    categories.value = response.data
-  } catch (error) {
-    console.error('Failed to fetch categories:', error)
-  }
+function loadCategories() {
+  categories.value = templateStorage.getCategories()
 }
 
-function selectTemplate(template: Template) {
+function selectTemplate(template: LocalTemplate) {
   selectedTemplate.value = template
 }
 
@@ -122,22 +141,71 @@ async function handleConfirm() {
   if (!selectedTemplate.value) return
 
   try {
-    loading.value = true
-    const response = await apiClient.post<TemplateRenderResponse>(
-      `/templates/${selectedTemplate.value.id}/render`,
-      null,
-      {
-        params: {
-          title: `新笔记 - ${selectedTemplate.value.name}`
-        }
-      }
-    )
-    emit('select', response.data)
+    const rendered = templateStorage.renderTemplate(selectedTemplate.value.id)
+    if (!rendered) {
+      ElMessage.error('模板渲染失败')
+      return
+    }
+
+    emit('select', rendered)
   } catch (error) {
     console.error('Failed to render template:', error)
-    ElMessage.error('渲染模板失败')
-  } finally {
-    loading.value = false
+    ElMessage.error('模板渲染失败')
+  }
+}
+
+async function handleDuplicate(template: LocalTemplate) {
+  try {
+    const newName = await ElMessageBox.prompt('请输入新模板名称', '复制模板', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputValue: `${template.name} (副本)`,
+      inputValidator: (value) => {
+        if (!value || value.trim().length === 0) {
+          return '模板名称不能为空'
+        }
+        return true
+      }
+    })
+
+    const duplicated = templateStorage.duplicateTemplate(template.id, newName.value)
+    if (duplicated) {
+      loadTemplates()
+      loadCategories()
+      ElMessage.success('模板复制成功')
+    } else {
+      ElMessage.error('模板复制失败')
+    }
+  } catch (error) {
+    // User cancelled
+  }
+}
+
+async function handleDelete(template: LocalTemplate) {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除模板 "${template.name}" 吗？此操作不可恢复。`,
+      '删除模板',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    const success = templateStorage.deleteTemplate(template.id)
+    if (success) {
+      if (selectedTemplate.value?.id === template.id) {
+        selectedTemplate.value = null
+      }
+      loadTemplates()
+      loadCategories()
+      ElMessage.success('模板已删除')
+    } else {
+      ElMessage.error('模板删除失败')
+    }
+  } catch (error) {
+    // User cancelled
   }
 }
 </script>
@@ -146,86 +214,111 @@ async function handleConfirm() {
 @import '@/assets/styles/variables.scss';
 
 .template-selector {
-  padding: $spacing-lg;
-  min-height: 400px;
   display: flex;
   flex-direction: column;
+  gap: 20px;
+  padding: 20px;
 }
 
 .category-filter {
   display: flex;
-  gap: $spacing-sm;
-  margin-bottom: $spacing-lg;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .template-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: $spacing-md;
-  flex: 1;
-  margin-bottom: $spacing-lg;
+  gap: 16px;
+  max-height: 500px;
+  overflow-y: auto;
 }
 
 .template-card {
   position: relative;
   border: 2px solid $color-border;
-  border-radius: $radius-md;
-  padding: $spacing-lg;
+  border-radius: 8px;
+  padding: 16px;
   cursor: pointer;
-  transition: all $transition-base;
+  transition: all 0.2s;
   background: white;
 
   &:hover {
     border-color: $color-primary;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+    .template-actions {
+      opacity: 1;
+    }
   }
 
   &.selected {
     border-color: $color-primary;
-    background: linear-gradient(135deg, #f5f7fa 0%, #f0f2ff 100%);
+    background-color: rgba($color-primary, 0.05);
   }
 
-  .template-icon {
-    font-size: 48px;
-    text-align: center;
-    margin-bottom: $spacing-md;
+  &.builtin {
+    background-color: rgba($color-info, 0.02);
+  }
+}
+
+.template-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+
+.template-info {
+  flex: 1;
+}
+
+.template-name {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: $color-text-primary;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.template-description {
+  margin: 0;
+  font-size: 13px;
+  color: $color-text-secondary;
+  line-height: 1.5;
+}
+
+.check-icon {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 24px;
+  color: $color-success;
+}
+
+.template-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+
+  .template-card.builtin & {
+    opacity: 0.7;
   }
 
-  .template-info {
-    .template-name {
-      font-size: $font-size-lg;
-      font-weight: 600;
-      color: $color-text-primary;
-      margin: 0 0 $spacing-sm 0;
-      text-align: center;
-    }
-
-    .template-description {
-      font-size: $font-size-sm;
-      color: $color-text-secondary;
-      margin: 0;
-      text-align: center;
-      line-height: 1.5;
-      min-height: 3em;
-    }
-  }
-
-  .check-icon {
-    position: absolute;
-    top: $spacing-md;
-    right: $spacing-md;
-    font-size: 24px;
-    color: $color-primary;
+  .template-card:hover & {
+    opacity: 1;
   }
 }
 
 .action-buttons {
   display: flex;
   justify-content: flex-end;
-  gap: $spacing-md;
-  padding-top: $spacing-lg;
+  gap: 12px;
+  padding-top: 12px;
   border-top: 1px solid $color-border;
 }
 </style>

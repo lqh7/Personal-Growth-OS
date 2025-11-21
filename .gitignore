@@ -68,3 +68,21 @@ htmlcov/
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
+
+# Test files and temporary directories
+test_mg/
+nul
+
+# Backend utilities and test scripts
+backend/create_test_*.py
+backend/utils/
+
+# Uploads directory (user-generated content)
+backend/uploads/
+
+# Claude Code settings
+.claude/settings.local.json
+.claude/agents/
+
+# Test directories
+tests/

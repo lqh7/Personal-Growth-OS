@@ -31,15 +31,15 @@
 
 ### 后端
 - **FastAPI** - 高性能Python Web框架
+- **Agno** - 轻量级AI多智能体框架
 - **SQLAlchemy** + **SQLite** - 关系数据库
 - **ChromaDB** - 向量数据库（RAG知识检索）
-- **Mem0** - 长期记忆管理（对话历史）
-- **LangChain** - AI应用开发框架
 
 ### AI集成
 - **可配置LLM提供商**: 支持OpenAI、Claude、Ollama（本地）
-- **LLM工厂模式**: 统一接口，灵活切换
-- **任务分解Agent**: 基于LangChain的智能任务规划
+- **多智能体系统**: 基于Agno的Agent和Team协作
+- **任务分解Agent**: 智能任务规划与分解
+- **内置记忆系统**: 自动学习用户偏好和习惯
 
 ## 快速开始
 

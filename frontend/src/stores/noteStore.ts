@@ -3,14 +3,13 @@
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Note, NoteCreate, RelatedNote, Tag, SearchHistory, Attachment, Template, Backlink } from '@/types'
+import type { Note, NoteCreate, RelatedNote, Tag, SearchHistory, Attachment, Backlink } from '@/types'
 import apiClient from '@/api/client'
 
 export const useNoteStore = defineStore('note', () => {
   // State
   const notes = ref<Note[]>([])
   const tags = ref<Tag[]>([])
-  const templates = ref<Template[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -214,54 +213,6 @@ export const useNoteStore = defineStore('note', () => {
     }
   }
 
-  // Iteration 2: Templates
-
-  async function fetchTemplates(category?: string): Promise<Template[]> {
-    try {
-      const response = await apiClient.get('/templates/', {
-        params: { category }
-      })
-      templates.value = response.data
-      return response.data
-    } catch (e: any) {
-      console.error('Failed to fetch templates:', e)
-      return []
-    }
-  }
-
-  async function renderTemplate(templateId: number, title?: string): Promise<{ content: string; template_name: string; suggested_title: string }> {
-    try {
-      const response = await apiClient.post(`/templates/${templateId}/render`, null, {
-        params: { title }
-      })
-      return response.data
-    } catch (e: any) {
-      error.value = e.message || 'Failed to render template'
-      throw e
-    }
-  }
-
-  async function createTemplate(templateData: { name: string; description?: string; content_template: string; icon?: string; category?: string }): Promise<Template> {
-    try {
-      const response = await apiClient.post('/templates/', templateData)
-      templates.value.unshift(response.data)
-      return response.data
-    } catch (e: any) {
-      error.value = e.message || 'Failed to create template'
-      throw e
-    }
-  }
-
-  async function deleteTemplate(templateId: number): Promise<void> {
-    try {
-      await apiClient.delete(`/templates/${templateId}`)
-      templates.value = templates.value.filter(t => t.id !== templateId)
-    } catch (e: any) {
-      error.value = e.message || 'Failed to delete template'
-      throw e
-    }
-  }
-
   // Iteration 3: Links
 
   async function fetchBacklinks(noteId: number): Promise<Backlink[]> {
@@ -301,7 +252,6 @@ export const useNoteStore = defineStore('note', () => {
     // State
     notes,
     tags,
-    templates,
     loading,
     error,
 
@@ -321,12 +271,6 @@ export const useNoteStore = defineStore('note', () => {
     uploadAttachment,
     downloadAttachment,
     deleteAttachment,
-
-    // Templates
-    fetchTemplates,
-    renderTemplate,
-    createTemplate,
-    deleteTemplate,
 
     // Links
     fetchBacklinks,

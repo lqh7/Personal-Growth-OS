@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.schemas.note import Note, NoteCreate, NoteUpdate, Tag, RelatedNote
+from app.schemas.note import Note, NoteCreate, NoteUpdate, Tag, RelatedNote, SearchHistory
 from app.crud import crud_note
 # Temporarily disabled AI features until chromadb dependencies are resolved
 # from app.services.vector_store import get_vector_store
@@ -25,25 +25,23 @@ router = APIRouter()
 #     vector_store.add_note(note_id, content, metadata)
 
 
-@router.get("/", response_model=List[Note])
+@router.get("/", response_model=List[Note], response_model_exclude_unset=False, response_model_exclude_none=False)
 def list_notes(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    project_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """
-    List all notes with optional filtering.
+    List all notes.
 
     - **skip**: Number of notes to skip (pagination)
     - **limit**: Maximum number of notes to return
-    - **project_id**: Filter by project ID
     """
-    notes = crud_note.get_notes(db, skip=skip, limit=limit, project_id=project_id)
+    notes = crud_note.get_notes(db, skip=skip, limit=limit)
     return notes
 
 
-@router.get("/{note_id}", response_model=Note)
+@router.get("/{note_id}", response_model=Note, response_model_exclude_unset=False, response_model_exclude_none=False)
 def get_note(note_id: int, db: Session = Depends(get_db)):
     """Get a specific note by ID."""
     note = crud_note.get_note(db, note_id)
@@ -52,7 +50,7 @@ def get_note(note_id: int, db: Session = Depends(get_db)):
     return note
 
 
-@router.post("/", response_model=Note, status_code=201)
+@router.post("/", response_model=Note, status_code=201, response_model_exclude_unset=False, response_model_exclude_none=False)
 def create_note(
     note: NoteCreate,
     db: Session = Depends(get_db)
@@ -122,35 +120,44 @@ def delete_note(note_id: int, db: Session = Depends(get_db)):
     # vector_store.delete_note(note_id)
 
 
-# Temporarily disabled - requires chromadb dependency
-# @router.get("/search/semantic", response_model=List[RelatedNote])
-# def search_notes_semantic(
-#     query: str = Query(..., min_length=3),
-#     limit: int = Query(5, ge=1, le=20),
-#     db: Session = Depends(get_db)
-# ):
-#     """
-#     Search notes using semantic search (RAG).
-#
-#     This endpoint performs similarity search in the vector store and returns
-#     notes ranked by relevance to the query.
-#
-#     - **query**: Search query text
-#     - **limit**: Maximum number of results
-#     """
-#     vector_store = get_vector_store()
-#     results = vector_store.search_similar_notes(query, n_results=limit)
-#
-#     # Fetch full note objects from database
-#     related_notes = []
-#     for result in results:
-#         note = crud_note.get_note(db, result["note_id"])
-#         if note:
-#             related_notes.append(
-#                 RelatedNote(note=note, similarity_score=result["score"])
-#             )
-#
-#     return related_notes
+@router.get("/search/semantic", response_model=List[RelatedNote])
+def search_notes_semantic(
+    query: str = Query(..., min_length=1),
+    limit: int = Query(5, ge=1, le=50),
+    db: Session = Depends(get_db)
+):
+    """
+    Search notes using text search (fallback for semantic search).
+
+    This endpoint performs a simple text-based search in note titles and content.
+    Note: True semantic/RAG search is temporarily disabled until ChromaDB is re-enabled.
+
+    - **query**: Search query text
+    - **limit**: Maximum number of results
+    """
+    # Get all notes and filter in Python for better Unicode support
+    all_notes = crud_note.get_notes(db, skip=0, limit=1000)
+    query_lower = query.lower()
+
+    # Filter notes containing the query string
+    matching_notes = [
+        note for note in all_notes
+        if query_lower in note.title.lower() or query_lower in note.content.lower()
+    ]
+
+    # Limit results
+    matching_notes = matching_notes[:limit]
+
+    # Record search history
+    crud_note.create_search_history(db, query, len(matching_notes))
+
+    # Convert to RelatedNote format (with dummy similarity score)
+    related_notes = [
+        RelatedNote(note=note, similarity_score=1.0)
+        for note in matching_notes
+    ]
+
+    return related_notes
 
 
 @router.get("/tags/", response_model=List[Tag])
@@ -163,3 +170,40 @@ def list_tags(db: Session = Depends(get_db)):
 def get_notes_by_tag(tag_name: str, db: Session = Depends(get_db)):
     """Get all notes with a specific tag."""
     return crud_note.search_notes_by_tag(db, tag_name)
+
+
+# Iteration 1: Core enhancements
+
+@router.put("/{note_id}/pin", response_model=Note)
+def toggle_pin(
+    note_id: int,
+    pinned: bool = Query(..., description="Whether to pin the note"),
+    db: Session = Depends(get_db)
+):
+    """Toggle note pinned status."""
+    note = crud_note.toggle_note_pin(db, note_id, pinned)
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return note
+
+
+@router.put("/{note_id}/favorite", response_model=Note)
+def toggle_favorite(
+    note_id: int,
+    favorited: bool = Query(..., description="Whether to favorite the note"),
+    db: Session = Depends(get_db)
+):
+    """Toggle note favorited status."""
+    note = crud_note.toggle_note_favorite(db, note_id, favorited)
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return note
+
+
+@router.get("/search/history", response_model=List[SearchHistory])
+def get_search_history(
+    limit: int = Query(10, ge=1, le=50, description="Number of recent searches to return"),
+    db: Session = Depends(get_db)
+):
+    """Get recent search history."""
+    return crud_note.get_search_history(db, limit=limit)

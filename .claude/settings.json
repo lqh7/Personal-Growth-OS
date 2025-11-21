@@ -1,6 +1,9 @@
 {
   "permissions": {
     "defaultMode": "bypassPermissions"
+  },
+  "env": {
+    "ANTHROPIC_DEFAULT_HAIRU_MODEL":"claude-4.5-haiku"
   }
   ,
   "model":"claude-4.5-sonnet"

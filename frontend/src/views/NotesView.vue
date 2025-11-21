@@ -49,29 +49,6 @@
           </template>
         </el-autocomplete>
 
-        <!-- 项目筛选器(新增) -->
-        <el-select
-          v-model="selectedProjects"
-          multiple
-          collapse-tags
-          collapse-tags-tooltip
-          placeholder="按项目筛选"
-          clearable
-          style="width: 180px"
-        >
-          <el-option
-            v-for="project in projectStore.projects"
-            :key="project.id"
-            :label="project.name"
-            :value="project.id"
-          >
-            <span class="project-option">
-              <span class="project-color-dot" :style="{ backgroundColor: project.color }"></span>
-              {{ project.name }}
-            </span>
-          </el-option>
-        </el-select>
-
         <el-select
           v-model="selectedTags"
           multiple
@@ -79,7 +56,7 @@
           collapse-tags-tooltip
           placeholder="按标签筛选"
           clearable
-          style="width: 180px"
+          style="width: 200px"
         >
           <el-option
             v-for="tag in noteStore.tags"
@@ -199,112 +176,134 @@
       />
     </el-dialog>
 
-    <!-- Create/Edit Dialog -->
+    <!-- Create/Edit Dialog - Notion-style Clean Layout -->
     <el-dialog
       v-model="showCreateDialog"
-      :title="editingNote ? '编辑笔记' : '创建笔记'"
+      :show-close="false"
       width="900px"
       top="5vh"
+      class="note-editor-dialog"
     >
-      <el-form :model="noteForm" label-width="80px">
-        <el-form-item label="标题">
-          <el-input v-model="noteForm.title" placeholder="笔记标题" />
-        </el-form-item>
-        <el-form-item label="内容">
+      <template #header>
+        <div class="clean-header">
+          <!-- Left: Metadata controls -->
+          <div class="header-left">
+            <el-select
+              v-model="noteForm.tag_names"
+              multiple
+              filterable
+              allow-create
+              placeholder="添加标签"
+              size="small"
+              class="header-tags"
+            >
+              <el-option
+                v-for="tag in noteStore.tags"
+                :key="tag.id"
+                :label="tag.name"
+                :value="tag.name"
+              />
+            </el-select>
+            <el-input
+              v-model="noteForm.source_url"
+              placeholder="来源链接"
+              size="small"
+              class="header-source"
+              clearable
+            >
+              <template #prefix>
+                <el-icon><Link /></el-icon>
+              </template>
+            </el-input>
+          </div>
+
+          <!-- Right: Action buttons -->
+          <div class="header-right">
+            <el-button size="small" @click="closeDialog">取消</el-button>
+            <el-button
+              type="primary"
+              size="small"
+              @click="handleSave"
+              :loading="noteStore.loading"
+            >
+              {{ editingNote ? '保存' : '创建' }}
+            </el-button>
+          </div>
+        </div>
+      </template>
+
+      <div class="clean-content">
+        <!-- Title Input - Large, Notion-style -->
+        <input
+          v-model="noteForm.title"
+          class="clean-title"
+          placeholder="无标题"
+        />
+
+        <!-- Editor - Seamless integration -->
+        <div class="clean-editor">
           <MdEditor
             v-model="noteForm.content"
             :language="'zh-CN'"
             :preview="true"
             :toolbars="editorToolbars"
-            :style="{ height: '400px' }"
+            :style="{ height: '550px' }"
+            theme="light"
           />
-        </el-form-item>
-        <el-form-item label="来源">
-          <el-input v-model="noteForm.source_url" placeholder="来源 URL（可选）" />
-        </el-form-item>
-        <el-form-item label="标签">
-          <el-select
-            v-model="noteForm.tag_names"
-            multiple
-            filterable
-            allow-create
-            placeholder="选择或创建标签"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="tag in noteStore.tags"
-              :key="tag.id"
-              :label="tag.name"
-              :value="tag.name"
-            />
-          </el-select>
-        </el-form-item>
+        </div>
 
-        <!-- Attachments Section (only show when editing existing note) -->
-        <el-form-item v-if="editingNote" label="附件">
+        <!-- Attachments (only show when editing) -->
+        <div v-if="editingNote && currentNoteAttachments.length > 0" class="clean-attachments">
+          <div class="attachments-title">
+            附件 ({{ currentNoteAttachments.length }})
+          </div>
           <AttachmentUploader
             :note-id="editingNote.id"
             :attachments="currentNoteAttachments"
             @upload-success="handleAttachmentUploadSuccess"
             @delete-success="handleAttachmentDelete"
           />
-        </el-form-item>
-      </el-form>
+        </div>
+      </div>
+
       <template #footer>
-        <el-button @click="closeDialog">取消</el-button>
-        <el-button type="primary" @click="handleSave" :loading="noteStore.loading">
-          保存
-        </el-button>
+        <div class="clean-footer">
+          <span v-if="editingNote" class="footer-time">
+            上次编辑: {{ formatTime(editingNote.updated_at) }}
+          </span>
+        </div>
       </template>
     </el-dialog>
 
-    <!-- View Dialog -->
-    <el-dialog v-model="showViewDialog" title="笔记详情" width="900px" top="5vh">
-      <div v-if="viewingNote">
-        <h2>{{ viewingNote.title }}</h2>
-        <div class="note-meta">
-          <el-tag
-            v-for="tag in viewingNote.tags"
-            :key="tag.id"
-            size="small"
-            style="margin-right: 8px"
-          >
-            {{ tag.name }}
-          </el-tag>
-          <span v-if="viewingNote.source_url" class="source-link">
-            <el-icon><Link /></el-icon>
-            <a :href="viewingNote.source_url" target="_blank">来源</a>
-          </span>
-        </div>
-        <el-divider />
-        <MdPreview
-          :model-value="viewingNote.content"
-          :language="'zh-CN'"
-        />
-      </div>
-      <template #footer>
-        <el-button @click="handleEdit">编辑</el-button>
-        <el-button type="danger" @click="handleDelete">删除</el-button>
-      </template>
-    </el-dialog>
+    <!-- View Dialog - New High-Quality Design -->
+    <NoteDetailDialog
+      v-if="viewingNote"
+      v-model="showViewDialog"
+      :note="viewingNote"
+      @update="handleNoteUpdate"
+      @delete="handleDelete"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, Link, Grid, List, Clock } from '@element-plus/icons-vue'
+import {
+  Plus, Search, Link, Grid, List, Clock, EditPen, Close,
+  PriceTag, Paperclip, Check
+} from '@element-plus/icons-vue'
 import { useNoteStore } from '@/stores/noteStore'
-import { useProjectStore } from '@/stores/projectStore'
 import NoteCard from '@/components/notes/NoteCard.vue'
 import AttachmentUploader from '@/components/notes/AttachmentUploader.vue'
 import TemplateSelector from '@/components/notes/TemplateSelector.vue'
+import NoteDetailDialog from '@/components/notes/NoteDetailDialog.vue'
 import type { Note, RelatedNote, Attachment, TemplateRenderResponse } from '@/types'
+import { templateStorage } from '@/services/templateStorage'
 import { MdEditor, MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 
 const noteStore = useNoteStore()
-const projectStore = useProjectStore()
 
 // ============================================
 // State
@@ -316,7 +315,6 @@ const searchQuery = ref('')
 const searchResults = ref<RelatedNote[]>([])
 const editingNote = ref<Note | null>(null)
 const viewingNote = ref<Note | null>(null)
-const selectedProjects = ref<number[]>([])
 const selectedTags = ref<number[]>([])
 const sortBy = ref('updated_at_desc')
 const viewMode = ref<'grid' | 'list'>('grid')
@@ -324,6 +322,7 @@ const viewMode = ref<'grid' | 'list'>('grid')
 // Iteration 1: Quick filters
 const quickFilter = ref<'pinned' | 'favorited' | 'recent' | null>(null)
 const searchHistory = ref<Array<{ value: string; result_count: number }>>([])
+const titleFocused = ref(false)
 
 // Iteration 2: Attachments & Templates
 const currentNoteAttachments = ref<Attachment[]>([])
@@ -333,8 +332,7 @@ const noteForm = ref({
   title: '',
   content: '',
   source_url: '',
-  tag_names: [] as string[],
-  template_id: undefined as number | undefined
+  tag_names: [] as string[]
 })
 
 // Markdown editor toolbar configuration
@@ -382,13 +380,6 @@ const filteredNotes = computed(() => {
     const sevenDaysAgo = new Date()
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
     notes = notes.filter(n => new Date(n.updated_at) > sevenDaysAgo)
-  }
-
-  // Filter by projects
-  if (selectedProjects.value.length > 0) {
-    notes = notes.filter(note =>
-      note.project_id && selectedProjects.value.includes(note.project_id)
-    )
   }
 
   // Filter by tags
@@ -439,9 +430,7 @@ watch(editingNote, async (note) => {
 onMounted(async () => {
   await Promise.all([
     noteStore.fetchNotes(),
-    noteStore.fetchTags(),
-    noteStore.fetchTemplates(),
-    projectStore.fetchProjects()
+    noteStore.fetchTags()
   ])
 
   // Load search history
@@ -472,6 +461,22 @@ function clearSearch() {
 function handleNoteClick(note: Note) {
   viewingNote.value = note
   showViewDialog.value = true
+}
+
+async function handleNoteUpdate(updates: Partial<Note>) {
+  if (!viewingNote.value) return
+
+  try {
+    await noteStore.updateNote(viewingNote.value.id, updates)
+    // Refresh the viewing note
+    const updatedNote = noteStore.notes.find(n => n.id === viewingNote.value!.id)
+    if (updatedNote) {
+      viewingNote.value = updatedNote
+    }
+  } catch (error) {
+    console.error('Failed to update note:', error)
+    ElMessage.error('更新失败')
+  }
 }
 
 function handleEdit() {
@@ -537,13 +542,37 @@ function closeDialog() {
     title: '',
     content: '',
     source_url: '',
-    tag_names: [],
-    template_id: undefined
+    tag_names: []
   }
 }
 
+// Format relative time
+function formatTime(dateString: string): string {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return '刚刚'
+  if (diffMins < 60) return `${diffMins}分钟前`
+  if (diffHours < 24) return `${diffHours}小时前`
+  if (diffDays < 7) return `${diffDays}天前`
+
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
 function openCreateDialog() {
-  useTemplate.value = noteStore.templates.length > 0
+  // Check if templates exist in localStorage
+  const templates = templateStorage.getAllTemplates()
+  useTemplate.value = templates.length > 0
   if (useTemplate.value) {
     showTemplateDialog.value = true
   } else {
@@ -661,13 +690,11 @@ function handleHistorySelect(item: { value: string }) {
   }
 }
 
-.project-option,
 .tag-option {
   display: flex;
   align-items: center;
   gap: $spacing-sm;
 
-  .project-color-dot,
   .tag-color-dot {
     width: 10px;
     height: 10px;
@@ -750,5 +777,134 @@ function handleHistorySelect(item: { value: string }) {
   line-height: 1.6;
   color: $color-text-regular;
   font-size: $font-size-sm;
+}
+
+// ============================================
+// Notion-style Clean Note Editor
+// ============================================
+
+:deep(.note-editor-dialog) {
+  .el-dialog__header {
+    padding: 16px 24px;
+    margin: 0;
+    border-bottom: 1px solid #e8e8e8;
+    background: #fff;
+  }
+
+  .el-dialog__body {
+    padding: 0;
+    max-height: calc(90vh - 140px);
+    overflow-y: auto;
+    background: #fff;
+
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #d0d0d0;
+      border-radius: 3px;
+
+      &:hover {
+        background: #b0b0b0;
+      }
+    }
+  }
+
+  .el-dialog__footer {
+    padding: 12px 24px;
+    border-top: 1px solid #e8e8e8;
+    background: #fafafa;
+  }
+}
+
+.clean-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+
+    .header-tags {
+      min-width: 200px;
+      max-width: 300px;
+    }
+
+    .header-source {
+      min-width: 250px;
+      max-width: 350px;
+    }
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+.clean-content {
+  padding: 40px 80px;
+  background: #fff;
+
+  .clean-title {
+    width: 100%;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.4;
+    color: #1a1a1a;
+    border: none;
+    outline: none;
+    background: transparent;
+    padding: 0;
+    margin-bottom: 20px;
+
+    &::placeholder {
+      color: #d0d0d0;
+      font-weight: 700;
+    }
+  }
+
+  .clean-editor {
+    margin-bottom: 30px;
+
+    :deep(.md-editor) {
+      border: none;
+      box-shadow: none;
+    }
+  }
+
+  .clean-attachments {
+    margin-top: 40px;
+    padding-top: 24px;
+    border-top: 1px solid #e8e8e8;
+
+    .attachments-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #606060;
+      margin-bottom: 16px;
+    }
+  }
+}
+
+.clean-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  .footer-time {
+    font-size: 12px;
+    color: #999;
+  }
 }
 </style>

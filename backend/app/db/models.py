@@ -51,7 +51,6 @@ class Project(Base):
 
     # Relationships
     tasks: Mapped[List["Task"]] = relationship("Task", back_populates="project")
-    notes: Mapped[List["Note"]] = relationship("Note", back_populates="project")
 
 
 class Task(Base):
@@ -142,9 +141,41 @@ class Note(Base):
         nullable=True,
         comment="Source URL for traceability - critical for trust"
     )
-    project_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("projects.id"), nullable=True
+
+    # Iteration 1: Core enhancements
+    cover_image: Mapped[str] = mapped_column(
+        String(2048),
+        nullable=True,
+        comment="Cover image URL (can be local file path or external URL)"
     )
+    emoji: Mapped[str] = mapped_column(
+        String(10),
+        nullable=True,
+        comment="Emoji icon for the note (e.g., 📝)"
+    )
+    is_pinned: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        index=True,
+        comment="Whether the note is pinned to top"
+    )
+    is_favorited: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        index=True,
+        comment="Whether the note is favorited"
+    )
+    view_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        comment="Number of times the note has been viewed"
+    )
+    sort_order: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        comment="Custom sort order weight for manual sorting"
+    )
+
     # Uses local time to match frontend timezone (前端时间为准)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
@@ -152,7 +183,6 @@ class Note(Base):
     )
 
     # Relationships
-    project: Mapped["Project"] = relationship("Project", back_populates="notes")
     tags: Mapped[List["Tag"]] = relationship(
         "Tag", secondary=note_tags, back_populates="notes"
     )
@@ -209,4 +239,114 @@ class UserProfileMemory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now
+    )
+
+
+class SearchHistory(Base):
+    """
+    Search History: Records user search queries for quick reuse.
+    记录用户搜索历史，支持快速重用。
+    """
+    __tablename__ = "search_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    query_text: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+        comment="The search query text"
+    )
+    result_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        comment="Number of results returned by this search"
+    )
+    # Uses local time to match frontend timezone (前端时间为准)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.now,
+        index=True,
+        comment="When the search was performed"
+    )
+
+
+class NoteAttachment(Base):
+    """
+    Note Attachment: File attachments for notes (Iteration 2).
+    笔记附件，支持文件上传和管理。
+    """
+    __tablename__ = "note_attachments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    note_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("notes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Reference to parent note"
+    )
+    filename: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        comment="Original filename of the attachment"
+    )
+    filepath: Mapped[str] = mapped_column(
+        String(512),
+        nullable=False,
+        comment="Relative path to file storage location"
+    )
+    filesize: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        comment="File size in bytes"
+    )
+    mimetype: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        comment="MIME type of the file (e.g., image/png, application/pdf)"
+    )
+    # Uses local time to match frontend timezone (前端时间为准)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.now,
+        index=True,
+        comment="When the attachment was uploaded"
+    )
+
+    # Relationships
+    note: Mapped["Note"] = relationship("Note")
+
+
+class NoteLink(Base):
+    """
+    Note Link: Bidirectional links between notes (Iteration 3).
+    笔记双向链接，支持Wiki风格的知识网络。
+    """
+    __tablename__ = "note_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    source_note_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("notes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Source note that contains the link"
+    )
+    target_note_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("notes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Target note being linked to"
+    )
+    link_type: Mapped[str] = mapped_column(
+        String(50),
+        default="wiki",
+        index=True,
+        comment="Link type (wiki, reference, etc.)"
+    )
+    # Uses local time to match frontend timezone (前端时间为准)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.now,
+        comment="When the link was created"
     )

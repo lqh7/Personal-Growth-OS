@@ -68,10 +68,8 @@ export interface Note {
   view_count: number
   sort_order: number
 
-  // Iteration 2: Attachments + Templates
-  template_id?: number
+  // Iteration 2: Attachments
   attachments: Attachment[]
-  template?: Template
 
   // Iteration 3: Wiki Links + Folders
   parent_note_id?: number
@@ -83,7 +81,6 @@ export interface NoteCreate {
   source_url?: string
   project_id?: number
   tag_names?: string[]
-  template_id?: number
 }
 
 export interface Tag {
@@ -127,6 +124,11 @@ export interface Attachment {
   created_at: string
 }
 
+// Templates now managed via localStorage (see services/templateStorage.ts)
+export type { LocalTemplate } from '@/services/templateStorage'
+
+// Legacy Template interfaces - kept for backward compatibility (deprecated)
+/** @deprecated Use LocalTemplate from templateStorage service instead */
 export interface Template {
   id: number
   name: string
@@ -138,6 +140,7 @@ export interface Template {
   updated_at: string
 }
 
+/** @deprecated Templates are now created via templateStorage service */
 export interface TemplateCreate {
   name: string
   description?: string

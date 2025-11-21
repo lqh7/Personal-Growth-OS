@@ -100,19 +100,19 @@ curl "http://localhost:8000/api/notes/search/semantic?query=项目管理&limit=5
 ## 架构概览
 
 **核心技术栈**：
-- **LangGraph** - 主力Agent框架（StateGraph驱动）
-- **LangChain Core** - 仅用于基础LLM接口，最小化使用
+- **Agno** - 轻量级AI多智能体框架
 - **ChromaDB** - 向量数据库用于RAG
-- **SQLite** - 关系数据库
-- **Mem0** - 长期记忆管理
+- **SQLite** - 关系数据库（包含Agno会话和用户记忆）
 
 ```
 app/
 ├── api/endpoints/    # API 路由
 │   ├── tasks.py      # 任务管理 API + Agent可视化
 │   └── notes.py      # 笔记管理 API
-├── agents/           # LangGraph Agents（核心）
-│   └── task_igniter_agent.py  # StateGraph驱动的任务分解Agent
+├── agents/           # Agno Agents（核心）
+│   ├── task_igniter_agent.py  # 任务分解Agent
+│   ├── triage_agent.py        # 意图分类Agent（计划中）
+│   └── cognitive_team.py      # 多Agent协作Team（计划中）
 ├── core/             # 核心配置
 │   ├── config.py     # 环境配置（支持自定义API URL）
 │   └── llm_factory.py  # LLM 工厂（多提供商支持）
@@ -127,37 +127,49 @@ app/
 │   └── note.py
 └── services/         # 业务逻辑服务
     ├── vector_store.py  # ChromaDB RAG 服务
-    └── memory_service.py  # Mem0 记忆服务
+    └── memory_service.py  # ~~Mem0 记忆服务~~ (已弃用，使用Agno内置User Memories)
 ```
 
-## LangGraph Agent架构
+## Agno Agent架构
 
 ### 任务分解Agent (Task Igniter)
 
-基于**LangGraph StateGraph**构建，完全不依赖LangChain Chain：
+基于**Agno Agent**构建，声明式配置：
 
 ```python
-# 状态定义
-class TaskIgniterState(TypedDict):
-    user_input: str
-    main_task_title: str
-    subtasks: List[Dict]
-    status: Literal["init", "analyzing", "decomposing", "completed", "error"]
-    ...
+from agno.agent import Agent
+from agno.db.sqlite import SqliteDb
+from agno.knowledge import Knowledge
+from agno.vectordb.chroma import ChromaDb
 
-# 节点定义
-analyze_task_node -> decompose_task_node -> retrieve_notes_node -> finalize
+db = SqliteDb(db_file="personal_growth_os.db")
+knowledge = Knowledge(
+    vector_db=ChromaDb(path="chroma_data", collection_name="notes")
+)
 
-# 条件路由
-根据status动态路由，支持错误处理
+task_igniter = Agent(
+    name="Task Igniter",
+    model=OpenAIChat(id="gpt-4o"),
+    db=db,                        # 自动会话管理
+    knowledge=knowledge,           # 自动RAG
+    search_knowledge=True,
+    enable_user_memories=True,    # 自动学习用户偏好
+    instructions=[...]
+)
+
+# 使用
+result = task_igniter.run(
+    "准备项目演示",
+    user_id="john",
+    session_id="task_123"
+)
 ```
 
-**查看Agent可视化**：
-```bash
-curl http://localhost:8000/api/tasks/agent/visualization
-```
-
-返回Mermaid图，可用于文档和debugging。
+**Agno自动功能**：
+- 会话管理和恢复
+- 用户偏好学习
+- 知识库检索
+- 工具调用
 
 ## 数据库
 
@@ -172,13 +184,13 @@ curl http://localhost:8000/api/tasks/agent/visualization
 - `note_tags` - 笔记-标签关联表
 - `user_profile_memories` - 用户偏好记忆
 
-## 三层数据存储
+## 两层数据存储
 
-1. **SQLite** - 关系数据（事实性数据）
-2. **ChromaDB** - 向量存储（知识语料库，用于 RAG）
+1. **SQLite** - 统一数据存储（`personal_growth_os.db`）
+   - 业务数据：任务、笔记、项目
+   - Agno数据：会话历史、用户记忆
+2. **ChromaDB** - 向量存储（知识语料库，用于RAG）
    - 存储在 `./chroma_data/`
-3. **Mem0** - 长期记忆（对话历史和用户偏好）
-   - 存储在 `./mem0_data/`
 
 ## 开发提示
 
@@ -194,10 +206,20 @@ print(response.content)
 
 ### 使用不同的 LLM 提供商
 
-在 `.env` 中更改 `LLM_PROVIDER`：
-- `openai` - 需要 OPENAI_API_KEY
-- `claude` - 需要 ANTHROPIC_API_KEY
-- `ollama` - 需要本地运行 Ollama
+Agno支持多种LLM提供商：
+```python
+# OpenAI
+from agno.models.openai import OpenAIChat
+model = OpenAIChat(id="gpt-4o")
+
+# Claude
+from agno.models.anthropic import Claude
+model = Claude(id="claude-sonnet-4")
+
+# Ollama
+from agno.models.ollama import Ollama
+model = Ollama(id="llama3.1:8b")
+```
 
 ## 故障排除
 
@@ -205,13 +227,13 @@ print(response.content)
 
 如果遇到 ChromaDB 权限问题，删除 `chroma_data` 文件夹并重启。
 
-### Mem0 未安装
-
-Mem0 是可选的。如果未安装，记忆功能将被禁用但不会影响其他功能。
+### Agno 安装
 
 ```bash
-pip install mem0ai
+pip install agno
 ```
+
+Agno内置用户记忆功能，无需额外依赖。
 
 ## MVP 限制
 

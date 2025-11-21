@@ -6,9 +6,13 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 import App from './App.vue'
 import router from './router'
+import { templateStorage } from './services/templateStorage'
 
 // 导入全局样式
 import '@/assets/styles/global.scss'
+
+// Initialize built-in templates on app startup
+templateStorage.initializeBuiltinTemplates()
 
 const app = createApp(App)
 
