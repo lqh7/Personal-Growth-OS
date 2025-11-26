@@ -1,28 +1,34 @@
 """
-Note management API endpoints with RAG integration.
+Note management API endpoints with RAG integration using pgvector.
 """
-from typing import List, Optional
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 
-from app.db.database import get_db
+from app.db.database import get_db, SessionLocal
 from app.schemas.note import Note, NoteCreate, NoteUpdate, Tag, RelatedNote, SearchHistory
 from app.crud import crud_note
-# Temporarily disabled AI features until chromadb dependencies are resolved
-# from app.services.vector_store import get_vector_store
+from app.services.vector_store import get_vector_store
 
 router = APIRouter()
 
 
-# Temporarily disabled - requires chromadb dependency
-# def vectorize_note_background(note_id: int, title: str, content: str, tags: List[str]):
-#     """Background task to vectorize note and add to ChromaDB."""
-#     vector_store = get_vector_store()
-#     metadata = {
-#         "title": title,
-#         "tags": tags
-#     }
-#     vector_store.add_note(note_id, content, metadata)
+def vectorize_note_background(note_id: int, content: str):
+    """
+    Background task to vectorize note and add to pgvector.
+
+    Args:
+        note_id: ID of the note to vectorize
+        content: Text content to embed
+    """
+    db = SessionLocal()
+    try:
+        vector_store = get_vector_store()
+        vector_store.add_note(db, note_id, content)
+    except Exception as e:
+        print(f"Error vectorizing note {note_id}: {e}")
+    finally:
+        db.close()
 
 
 @router.get("/", response_model=List[Note], response_model_exclude_unset=False, response_model_exclude_none=False)
@@ -53,24 +59,23 @@ def get_note(note_id: int, db: Session = Depends(get_db)):
 @router.post("/", response_model=Note, status_code=201, response_model_exclude_unset=False, response_model_exclude_none=False)
 def create_note(
     note: NoteCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
     Create a new note.
 
-    Note: Automatic vectorization is temporarily disabled until chromadb dependencies are resolved.
+    The note content will be automatically vectorized in the background
+    for semantic search using pgvector.
     """
     db_note = crud_note.create_note(db, note)
 
-    # Vectorization temporarily disabled
-    # tag_names = [tag.name for tag in db_note.tags]
-    # background_tasks.add_task(
-    #     vectorize_note_background,
-    #     db_note.id,
-    #     db_note.title,
-    #     db_note.content,
-    #     tag_names
-    # )
+    # Vectorize note in background
+    background_tasks.add_task(
+        vectorize_note_background,
+        db_note.id,
+        db_note.content
+    )
 
     return db_note
 
@@ -79,27 +84,25 @@ def create_note(
 def update_note(
     note_id: int,
     note_update: NoteUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
     Update an existing note.
 
-    Note: Re-vectorization is temporarily disabled until chromadb dependencies are resolved.
+    If content is updated, the note will be re-vectorized in the background.
     """
     updated_note = crud_note.update_note(db, note_id, note_update)
     if not updated_note:
         raise HTTPException(status_code=404, detail="Note not found")
 
-    # Re-vectorization temporarily disabled
-    # if note_update.content is not None:
-    #     tag_names = [tag.name for tag in updated_note.tags]
-    #     background_tasks.add_task(
-    #         vectorize_note_background,
-    #         updated_note.id,
-    #         updated_note.title,
-    #         updated_note.content,
-    #         tag_names
-    #     )
+    # Re-vectorize if content was updated
+    if note_update.content is not None:
+        background_tasks.add_task(
+            vectorize_note_background,
+            updated_note.id,
+            updated_note.content
+        )
 
     return updated_note
 
@@ -109,15 +112,15 @@ def delete_note(note_id: int, db: Session = Depends(get_db)):
     """
     Delete a note from the database.
 
-    Note: Vector store deletion is temporarily disabled until chromadb dependencies are resolved.
+    The note's vector embedding will also be deleted.
     """
     success = crud_note.delete_note(db, note_id)
     if not success:
         raise HTTPException(status_code=404, detail="Note not found")
 
-    # Vector store deletion temporarily disabled
-    # vector_store = get_vector_store()
-    # vector_store.delete_note(note_id)
+    # Delete vector embedding
+    vector_store = get_vector_store()
+    vector_store.delete_note(db, note_id)
 
 
 @router.get("/search/semantic", response_model=List[RelatedNote])
@@ -127,15 +130,53 @@ def search_notes_semantic(
     db: Session = Depends(get_db)
 ):
     """
-    Search notes using text search (fallback for semantic search).
+    Search notes using semantic similarity with pgvector.
 
-    This endpoint performs a simple text-based search in note titles and content.
-    Note: True semantic/RAG search is temporarily disabled until ChromaDB is re-enabled.
+    This endpoint performs vector-based semantic search to find notes
+    that are conceptually similar to the query, even if they don't
+    contain the exact words.
 
     - **query**: Search query text
     - **limit**: Maximum number of results
     """
-    # Get all notes and filter in Python for better Unicode support
+    vector_store = get_vector_store()
+
+    # Check if we have any embeddings
+    embedding_count = vector_store.get_embedding_count(db)
+    if embedding_count == 0:
+        # Fallback to text search if no embeddings exist yet
+        return _text_search_fallback(db, query, limit)
+
+    # Perform semantic search
+    search_results = vector_store.search_similar_notes(db, query, n_results=limit)
+
+    # Fetch full note data for each result
+    related_notes = []
+    for result in search_results:
+        note = crud_note.get_note(db, result["note_id"])
+        if note:
+            related_notes.append(
+                RelatedNote(note=note, similarity_score=result["score"])
+            )
+
+    # Record search history
+    crud_note.create_search_history(db, query, len(related_notes))
+
+    return related_notes
+
+
+def _text_search_fallback(db: Session, query: str, limit: int) -> List[RelatedNote]:
+    """
+    Fallback text-based search when no embeddings exist.
+
+    Args:
+        db: Database session
+        query: Search query text
+        limit: Maximum results
+
+    Returns:
+        List of related notes with dummy similarity scores
+    """
     all_notes = crud_note.get_notes(db, skip=0, limit=1000)
     query_lower = query.lower()
 
@@ -152,12 +193,10 @@ def search_notes_semantic(
     crud_note.create_search_history(db, query, len(matching_notes))
 
     # Convert to RelatedNote format (with dummy similarity score)
-    related_notes = [
+    return [
         RelatedNote(note=note, similarity_score=1.0)
         for note in matching_notes
     ]
-
-    return related_notes
 
 
 @router.get("/tags/", response_model=List[Tag])

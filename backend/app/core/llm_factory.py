@@ -1,141 +1,80 @@
 """
-LLM Factory for creating LLM instances based on configuration.
-Supports multiple providers: OpenAI, Claude (Anthropic), Ollama.
+LLM Factory - Embeddings generation using sentence-transformers.
+Supports Agno framework for AI agents.
 """
-from typing import Optional
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_anthropic import ChatAnthropic
-from langchain_community.chat_models import ChatOllama
-from langchain_community.embeddings import OllamaEmbeddings
-from langchain_core.language_models import BaseLanguageModel
-from langchain_core.embeddings import Embeddings
+from typing import List, Optional
+from functools import lru_cache
 
 from .config import settings
 
 
-class LLMFactory:
-    """Factory class for creating LLM instances."""
+class EmbeddingService:
+    """Service for generating text embeddings using sentence-transformers."""
 
-    @staticmethod
-    def create_chat_model(
-        provider: Optional[str] = None,
-        temperature: float = 0.7,
-        **kwargs
-    ) -> BaseLanguageModel:
+    def __init__(self, model_name: Optional[str] = None):
         """
-        Create a chat model instance based on the provider.
+        Initialize embedding service with specified model.
 
         Args:
-            provider: LLM provider ('openai', 'claude', 'ollama').
-                     If None, uses settings.LLM_PROVIDER
-            temperature: Temperature for generation (0-1)
-            **kwargs: Additional provider-specific arguments
-
-        Returns:
-            BaseLanguageModel: Configured chat model instance
-
-        Raises:
-            ValueError: If provider is not supported
+            model_name: Model name for sentence-transformers.
+                       If None, uses settings.EMBEDDING_MODEL
         """
-        provider = provider or settings.LLM_PROVIDER
+        self.model_name = model_name or settings.EMBEDDING_MODEL
+        self._model = None
 
-        if provider == "openai":
-            openai_kwargs = {
-                "api_key": settings.OPENAI_API_KEY,
-                "model": settings.OPENAI_MODEL,
-                "temperature": temperature,
-            }
-            # Add custom base URL if provided
-            if settings.OPENAI_API_BASE:
-                openai_kwargs["base_url"] = settings.OPENAI_API_BASE
-            openai_kwargs.update(kwargs)
-            return ChatOpenAI(**openai_kwargs)
+    @property
+    def model(self):
+        """Lazy load the model to avoid startup overhead."""
+        if self._model is None:
+            from sentence_transformers import SentenceTransformer
+            self._model = SentenceTransformer(self.model_name)
+        return self._model
 
-        elif provider == "claude":
-            anthropic_kwargs = {
-                "api_key": settings.ANTHROPIC_API_KEY,
-                "model": settings.ANTHROPIC_MODEL,
-                "temperature": temperature,
-            }
-            # Add custom base URL if provided
-            if settings.ANTHROPIC_API_BASE:
-                anthropic_kwargs["base_url"] = settings.ANTHROPIC_API_BASE
-            anthropic_kwargs.update(kwargs)
-            return ChatAnthropic(**anthropic_kwargs)
-
-        elif provider == "ollama":
-            return ChatOllama(
-                base_url=settings.OLLAMA_BASE_URL,
-                model=settings.OLLAMA_MODEL,
-                temperature=temperature,
-                **kwargs
-            )
-
-        else:
-            raise ValueError(
-                f"Unsupported LLM provider: {provider}. "
-                f"Supported providers: openai, claude, ollama"
-            )
-
-    @staticmethod
-    def create_embeddings(
-        provider: Optional[str] = None,
-        **kwargs
-    ) -> Embeddings:
+    def embed_query(self, text: str) -> List[float]:
         """
-        Create an embeddings instance.
+        Generate embedding for a single text.
 
         Args:
-            provider: Embeddings provider. If None, uses settings.LLM_PROVIDER
-            **kwargs: Additional provider-specific arguments
+            text: Input text to embed
 
         Returns:
-            Embeddings: Configured embeddings instance
+            List of floats representing the embedding vector
         """
-        provider = provider or settings.LLM_PROVIDER
+        embedding = self.model.encode(text, convert_to_numpy=True)
+        return embedding.tolist()
 
-        # For embeddings, we prefer OpenAI or sentence-transformers
-        # Ollama can also be used for local embeddings
-        if provider in ["openai", "claude"]:
-            return OpenAIEmbeddings(
-                api_key=settings.OPENAI_API_KEY,
-                model=settings.EMBEDDING_MODEL,
-                **kwargs
-            )
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generate embeddings for multiple texts.
 
-        elif provider == "ollama":
-            return OllamaEmbeddings(
-                base_url=settings.OLLAMA_BASE_URL,
-                model=settings.OLLAMA_MODEL,
-                **kwargs
-            )
+        Args:
+            texts: List of input texts to embed
 
-        else:
-            # Default to sentence-transformers for local embeddings
-            from langchain_community.embeddings import HuggingFaceEmbeddings
-            return HuggingFaceEmbeddings(
-                model_name=settings.EMBEDDING_MODEL,
-                **kwargs
-            )
+        Returns:
+            List of embedding vectors
+        """
+        embeddings = self.model.encode(texts, convert_to_numpy=True)
+        return embeddings.tolist()
+
+    @property
+    def dimension(self) -> int:
+        """Get the embedding dimension for the current model."""
+        # all-MiniLM-L6-v2 produces 384-dimensional embeddings
+        return 384
 
 
-# Convenience functions for common use cases
-def get_chat_model(temperature: float = 0.7, **kwargs) -> BaseLanguageModel:
-    """Get the default chat model configured in settings."""
-    return LLMFactory.create_chat_model(temperature=temperature, **kwargs)
-
-
-def get_embeddings(**kwargs) -> Embeddings:
-    """Get the default embeddings model configured in settings."""
-    return LLMFactory.create_embeddings(**kwargs)
+@lru_cache()
+def get_embeddings() -> EmbeddingService:
+    """Get cached embeddings service instance."""
+    return EmbeddingService()
 
 
 def get_chat_model_config() -> dict:
     """
-    Get chat model configuration dictionary for frameworks that need raw config.
+    Get chat model configuration dictionary for Agno framework.
 
     Returns:
-        dict: Configuration dictionary with model, api_key, and base_url
+        dict: Configuration dictionary with model, api_key, and optional base_url
     """
     provider = settings.LLM_PROVIDER
 

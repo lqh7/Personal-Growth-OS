@@ -1,6 +1,7 @@
 """
 SQLAlchemy database models for Personal Growth OS.
 Based on the three-pillar architecture design.
+PostgreSQL + pgvector for unified data and vector storage.
 """
 from datetime import datetime
 from typing import List
@@ -9,6 +10,7 @@ from sqlalchemy import (
     Boolean, CheckConstraint, Table
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
+from pgvector.sqlalchemy import Vector
 
 from app.db.database import Base
 
@@ -350,3 +352,52 @@ class NoteLink(Base):
         default=datetime.now,
         comment="When the link was created"
     )
+
+
+class NoteEmbedding(Base):
+    """
+    Note Embedding: Vector storage for semantic search using pgvector.
+    笔记向量存储，用于语义搜索。使用 PostgreSQL pgvector 扩展。
+    """
+    __tablename__ = "note_embeddings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    note_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("notes.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,  # Each note has only one embedding
+        index=True,
+        comment="Reference to the note being embedded"
+    )
+    chunk_index: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        comment="Chunk index for large notes (reserved for future use)"
+    )
+    content_hash: Mapped[str] = mapped_column(
+        String(64),
+        nullable=True,
+        comment="SHA-256 hash of content to detect changes"
+    )
+    # 384-dimensional vector for all-MiniLM-L6-v2 model
+    embedding = mapped_column(
+        Vector(384),
+        nullable=False,
+        comment="384-dimensional embedding vector from sentence-transformers"
+    )
+    # Uses local time to match frontend timezone (前端时间为准)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.now,
+        comment="When the embedding was created"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.now,
+        onupdate=datetime.now,
+        comment="When the embedding was last updated"
+    )
+
+    # Relationship
+    note: Mapped["Note"] = relationship("Note")

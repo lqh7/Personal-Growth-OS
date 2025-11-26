@@ -26,7 +26,7 @@ from app.core.llm_factory import get_chat_model_config
 
 def search_knowledge_base(query: str, limit: int = 5) -> List[Dict[str, Any]]:
     """
-    Search the knowledge base for related notes.
+    Search the knowledge base for related notes using pgvector semantic search.
 
     Args:
         query: Search query text
@@ -35,14 +35,34 @@ def search_knowledge_base(query: str, limit: int = 5) -> List[Dict[str, Any]]:
     Returns:
         List of related notes with metadata
     """
-    # TODO: Integrate with vector_store service
-    # from app.services.vector_store import get_vector_store
-    # vector_store = get_vector_store()
-    # results = vector_store.search_similar_notes(query, n_results=limit)
-    # return results
+    try:
+        from app.services.vector_store import get_vector_store
+        from app.db.database import SessionLocal
+        from app.crud import crud_note
 
-    # Placeholder for now
-    return []
+        db = SessionLocal()
+        try:
+            vector_store = get_vector_store()
+            results = vector_store.search_similar_notes(db, query, n_results=limit)
+
+            # Enrich results with note content
+            enriched_results = []
+            for result in results:
+                note = crud_note.get_note(db, result["note_id"])
+                if note:
+                    enriched_results.append({
+                        "note_id": note.id,
+                        "title": note.title,
+                        "content": note.content[:200] + "..." if len(note.content) > 200 else note.content,
+                        "similarity_score": result["score"]
+                    })
+
+            return enriched_results
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"Knowledge base search error: {e}")
+        return []
 
 
 def format_task_summary(

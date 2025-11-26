@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Personal Growth OS** is a "second brain" application designed to accelerate personal growth by helping users combat procrastination, solidify knowledge, and drive continuous self-improvement through data-driven reflection.
 
-**Current Status**: MVP in active development. Backend uses **Agno** for AI agents, with ChromaDB for RAG. Frontend features weekly schedule view, task kanban with floating task column, AI chat panel, and comprehensive task/note management. Chinese character encoding is fully supported.
+**Current Status**: MVP in active development. Backend uses **Agno** for AI agents, with **PostgreSQL + pgvector** for unified data and vector storage. Frontend features weekly schedule view, task kanban with floating task column, AI chat panel, and comprehensive task/note management. Chinese character encoding is fully supported.
 
 **IMPORTANT**: The actual implementation uses **Agno** framework, NOT LangGraph. Reference `backend/app/agents/task_igniter_agno.py` for the agent implementation pattern.
 
@@ -150,21 +150,24 @@ curl "http://localhost:8000/api/tasks/agent/visualization"
 
 ### Database Management
 
-Database file: `backend/personal_growth_os.db` (auto-created on first run in backend directory)
+**PostgreSQL + pgvector** (cloud-hosted): The database is hosted on a remote PostgreSQL server with pgvector extension for vector similarity search.
 
-To reset database during development:
+**Configuration**: Set `DATABASE_URL` in `backend/.env`:
 ```bash
-# Windows (from project root):
-cd backend
-if exist personal_growth_os.db del personal_growth_os.db
-cd ..
+DATABASE_URL=postgresql://username:password@host:5432/personal_growth_os
+```
 
-# Linux/Mac (from project root):
-cd backend && rm -f personal_growth_os.db && cd ..
+**Database initialization**: Tables and pgvector extension are auto-created on first startup. The system will:
+1. Create pgvector extension: `CREATE EXTENSION IF NOT EXISTS vector`
+2. Create all tables defined in `models.py`
+3. Create default "默认" project if not exists
 
-# Or from backend directory:
-# Windows: if exist personal_growth_os.db del personal_growth_os.db
-# Linux/Mac: rm -f personal_growth_os.db
+**To reset database** (use with caution - deletes all data):
+```sql
+-- Connect to PostgreSQL and drop/recreate database
+DROP DATABASE personal_growth_os;
+CREATE DATABASE personal_growth_os;
+-- Extension will be recreated on app startup
 ```
 
 **Utility Scripts** (in `backend/utils/`):
@@ -188,7 +191,7 @@ See `tests/README.md` and `backend/utils/README.md` for detailed usage instructi
 
 ## Key Design Decisions
 
-### Database Schema (SQLite)
+### Database Schema (PostgreSQL)
 
 Core entities with relationships:
 - `projects` - Top-level organizational containers with `color` for UI differentiation and `is_system` flag for protection
@@ -229,8 +232,10 @@ Core entities with relationships:
    - Tasks auto-reappear when snooze expires
    - Display in dedicated "延后任务" section on DashboardView
 
-4. **Contextual Knowledge Resurrection (知识自动重现)** - PARTIAL
-   - Semantic search API implemented via ChromaDB
+4. **Contextual Knowledge Resurrection (知识自动重现)** - IMPLEMENTED
+   - Semantic search API implemented via **pgvector** (PostgreSQL extension)
+   - Note embeddings auto-generated on create/update using sentence-transformers
+   - Vector similarity search with cosine distance
    - Proactive suggestion UI pending
 
 5. **Attachment Management (附件管理)** - IMPLEMENTED
@@ -286,7 +291,6 @@ backend/app/
 │   └── crud_project.py
 ├── services/               # Business logic layer
 │   ├── vector_store.py     # pgvector integration (semantic search)
-│   ├── memory_service.py   # Memory management (legacy)
 │   ├── file_storage.py     # File upload/download service
 │   └── chunking.py         # Text chunking service (for RAG)
 ├── agents/                 # Agno agents
@@ -399,21 +403,28 @@ The Task Igniter Agent (backend/app/agents/task_igniter_agno.py:1) demonstrates 
 
 ### LLM Provider Integration
 
-The system supports multiple LLM providers via `core/llm_factory.py`:
-
-```python
-from app.core.llm_factory import get_chat_model
-
-# Get configured LLM
-llm = get_chat_model(temperature=0.7)
-
-# Invoke
-response = llm.invoke("Your prompt here")
-```
-
-Configuration is centralized in `.env`:
+The system supports multiple LLM providers. Configuration is centralized in `.env`:
 - `LLM_PROVIDER=openai|claude|ollama`
 - API keys and base URLs for each provider
+
+For embeddings, use `core/llm_factory.py`:
+
+```python
+from app.core.llm_factory import get_embeddings
+
+# Get embedding service (sentence-transformers)
+embeddings = get_embeddings()
+
+# Generate embedding vector
+vector = embeddings.embed_query("Your text here")
+```
+
+For Agno agents, use `get_chat_model_config()`:
+```python
+from app.core.llm_factory import get_chat_model_config
+
+config = get_chat_model_config()  # Returns dict with model, api_key, base_url
+```
 
 ### Three-Layer Backend Architecture
 
@@ -656,11 +667,13 @@ This allows Claude Code to execute commands and make file changes without reques
 1. **DON'T** put SQL queries in API endpoints - use CRUD layer
 2. **DON'T** skip TypeScript type definitions when adding new features
 3. **DON'T** forget UTF-8 encoding for Chinese characters (FastAPI uses `UTF8JSONResponse` + middleware)
-4. **DON'T** use LangGraph patterns - this project uses Agno
-5. **DO** use Agno for AI agents with declarative configuration
-6. **DO** refer to backend/app/agents/task_igniter_agno.py:1 for Agno patterns
-7. **DO** refer to doc/日程表详细设计.md for schedule view implementation details
-8. **DO** refer to doc/系统现状总结.md for current implementation status
+4. **DON'T** use LangGraph/LangChain patterns - this project uses Agno
+5. **DON'T** use ChromaDB - this project uses pgvector for vector storage
+6. **DO** use Agno for AI agents with declarative configuration
+7. **DO** use sentence-transformers for embeddings (not LangChain embeddings)
+8. **DO** refer to backend/app/agents/task_igniter_agno.py:1 for Agno patterns
+9. **DO** refer to doc/日程表详细设计.md for schedule view implementation details
+10. **DO** refer to doc/系统现状总结.md for current implementation status
 
 ## Known Implementation Details
 
@@ -694,14 +707,31 @@ The backend uses a custom `UTF8JSONResponse` class and middleware to ensure prop
 
 ## Technology Stack Clarification
 
-**IMPORTANT**: This project uses **Agno** for AI agents, NOT LangGraph. Some older documentation may reference LangGraph, but the actual implementation has migrated to Agno for its lighter weight and declarative approach.
+**IMPORTANT**: This project uses **Agno** for AI agents (NOT LangGraph) and **PostgreSQL + pgvector** for data storage (NOT SQLite + ChromaDB).
 
 **Framework Evolution**:
-- Initial plan: LangGraph (state-driven workflow)
-- Current implementation: **Agno** (declarative agent configuration)
-- Reason: Simpler API, better developer experience, less boilerplate
+- Initial plan: LangGraph + SQLite + ChromaDB
+- Current implementation: **Agno** + **PostgreSQL + pgvector**
+- Reason: Simpler API, unified database, cloud deployment ready
+
+**Database Migration (2025-11)**: Migrated from dual-database (SQLite + ChromaDB) to unified PostgreSQL + pgvector:
+- Single data source eliminates sync issues
+- ACID transactions for data consistency
+- pgvector extension for efficient vector similarity search
+- Cloud deployment enables remote access and automatic backups
+
+**Dependencies Removed**:
+- `langgraph`, `langchain-*` - Replaced by Agno
+- `chromadb` - Replaced by pgvector
+- `mem0ai` - Not currently used
+- `alembic` - Not needed for MVP
+
+**Dependencies Added**:
+- `psycopg2-binary` - PostgreSQL driver
+- `pgvector` - Vector extension support
+- `sentence-transformers` - Local embedding generation
 
 Refer to:
 - `doc/系统现状总结.md` - Current implementation status
-- `doc/框架选型.md` - Framework selection rationale
+- `doc/数据库迁移指南.md` - Database migration details
 - `backend/app/agents/task_igniter_agno.py` - Reference implementation

@@ -49,14 +49,9 @@ class Settings(BaseSettings):
     # Embedding Model
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
 
-    # Database
-    DATABASE_URL: str = "sqlite:///./personal_growth_os.db"
-
-    # ChromaDB
-    CHROMA_PERSIST_DIRECTORY: str = "./chroma_data"
-
-    # Mem0
-    MEM0_PERSIST_DIRECTORY: str = "./mem0_data"
+    # Database - PostgreSQL + pgvector
+    # Format: postgresql://username:password@host:port/database_name
+    DATABASE_URL: str = "postgresql://localhost/personal_growth_os"
 
     model_config = SettingsConfigDict(
         env_file=".env",

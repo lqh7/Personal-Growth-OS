@@ -1,180 +1,163 @@
 """
-Vector Store Service using ChromaDB for RAG.
-用于存储和检索笔记的向量化表示（分块存储）。
+Vector Store Service using PostgreSQL pgvector.
+用于存储和检索笔记的向量化表示。
 """
-from typing import List, Dict, Any, Optional
-import chromadb
-from chromadb.config import Settings
+from typing import List, Dict, Any
+from sqlalchemy.orm import Session
+from sqlalchemy import text
 from functools import lru_cache
+import hashlib
 
-from app.core.config import settings
+from app.db.models import NoteEmbedding, Note
 from app.core.llm_factory import get_embeddings
-from app.services.chunking import get_chunker
 
 
 class VectorStoreService:
-    """Service for managing vector embeddings in ChromaDB."""
+    """Service for managing vector embeddings in PostgreSQL with pgvector."""
 
     def __init__(self):
-        """Initialize ChromaDB client and collection."""
-        self.client = chromadb.Client(Settings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory=settings.CHROMA_PERSIST_DIRECTORY
-        ))
-
-        # Get or create collection for knowledge base
-        self.collection = self.client.get_or_create_collection(
-            name="knowledge_base",
-            metadata={"description": "Personal Growth OS knowledge corpus"}
-        )
-
-        # Get embeddings function
+        """Initialize vector store service with embeddings model."""
         self.embeddings = get_embeddings()
 
-        # Get text chunker
-        self.chunker = get_chunker(chunk_size=500, chunk_overlap=50)
-
-    def add_note(
-        self,
-        note_id: int,
-        content: str,
-        is_markdown: bool = True
-    ) -> int:
+    def _get_content_hash(self, content: str) -> str:
         """
-        Add a note to the vector store (分块存储).
+        Generate SHA-256 hash of content for change detection.
 
         Args:
-            note_id: Unique identifier for the note (关联 SQLite)
-            content: Note content to vectorize
-            is_markdown: Whether content is markdown (use smart splitting)
+            content: Text content to hash
 
         Returns:
-            Number of chunks created
+            64-character hex string
         """
-        # 先删除该笔记的所有旧分块（如果存在）
-        self.delete_note(note_id)
+        return hashlib.sha256(content.encode('utf-8')).hexdigest()
 
-        # 分块
-        if is_markdown:
-            chunks = self.chunker.smart_split_markdown(content)
+    def add_note(self, db: Session, note_id: int, content: str) -> bool:
+        """
+        Add or update note embedding in pgvector.
+
+        Args:
+            db: Database session
+            note_id: ID of the note to embed
+            content: Text content to vectorize
+
+        Returns:
+            True if embedding was created/updated, False if content unchanged
+        """
+        content_hash = self._get_content_hash(content)
+
+        # Check if embedding exists and content hasn't changed
+        existing = db.query(NoteEmbedding).filter(
+            NoteEmbedding.note_id == note_id
+        ).first()
+
+        if existing and existing.content_hash == content_hash:
+            return False  # Content unchanged, skip update
+
+        # Generate embedding vector
+        embedding = self.embeddings.embed_query(content)
+
+        if existing:
+            # Update existing embedding
+            existing.embedding = embedding
+            existing.content_hash = content_hash
         else:
-            chunks = self.chunker.split_text(content)
+            # Create new embedding
+            new_embedding = NoteEmbedding(
+                note_id=note_id,
+                embedding=embedding,
+                content_hash=content_hash
+            )
+            db.add(new_embedding)
 
-        if not chunks:
-            return 0
+        db.commit()
+        return True
 
-        # 批量生成 embeddings 和 IDs
-        chunk_ids = []
-        chunk_embeddings = []
-
-        for chunk_index, chunk_text in enumerate(chunks):
-            # 生成 chunk ID: "note_id#chunk_index"
-            chunk_id = f"{note_id}#{chunk_index}"
-            chunk_ids.append(chunk_id)
-
-            # 生成向量
-            embedding = self.embeddings.embed_query(chunk_text)
-            chunk_embeddings.append(embedding)
-
-        # 批量添加到 ChromaDB（只存 ID 和 embedding）
-        self.collection.add(
-            ids=chunk_ids,
-            embeddings=chunk_embeddings
-            # documents=chunks  # 可选：如果想在 ChromaDB 中保留文本用于调试
-            # metadatas=None    # 不需要！所有元数据在 SQLite
-        )
-
-        return len(chunks)
-
-    def update_note(
-        self,
-        note_id: int,
-        content: str,
-        is_markdown: bool = True
-    ) -> int:
+    def update_note(self, db: Session, note_id: int, content: str) -> bool:
         """
-        Update an existing note in the vector store.
-        实际上就是重新分块并存储。
-        """
-        return self.add_note(note_id, content, is_markdown)
+        Update an existing note embedding.
+        Alias for add_note since add_note handles both create and update.
 
-    def delete_note(self, note_id: int) -> None:
-        """
-        Delete all chunks of a note from the vector store.
-        删除某个笔记的所有分块。
-        """
-        try:
-            # 查询该笔记的所有分块 ID
-            # ChromaDB 支持 where 过滤，但我们用 ID 前缀匹配更简单
-            # 由于 chunk_id 格式为 "note_id#chunk_index"
-            # 我们需要获取所有以 "note_id#" 开头的 ID
+        Args:
+            db: Database session
+            note_id: ID of the note to update
+            content: New text content to vectorize
 
-            # 方法1: 获取所有 ID 然后过滤（适合笔记数量不多的情况）
-            all_ids = self.collection.get()['ids']
-            chunk_ids_to_delete = [
-                id for id in all_ids
-                if id.startswith(f"{note_id}#")
-            ]
+        Returns:
+            True if embedding was updated, False if content unchanged
+        """
+        return self.add_note(db, note_id, content)
 
-            if chunk_ids_to_delete:
-                self.collection.delete(ids=chunk_ids_to_delete)
-        except Exception:
-            # Note might not exist in vector store, ignore
-            pass
+    def delete_note(self, db: Session, note_id: int) -> bool:
+        """
+        Delete note embedding from pgvector.
+
+        Args:
+            db: Database session
+            note_id: ID of the note whose embedding to delete
+
+        Returns:
+            True if embedding was deleted, False if not found
+        """
+        result = db.query(NoteEmbedding).filter(
+            NoteEmbedding.note_id == note_id
+        ).delete()
+        db.commit()
+        return result > 0
 
     def search_similar_notes(
         self,
+        db: Session,
         query: str,
         n_results: int = 5
     ) -> List[Dict[str, Any]]:
         """
-        Search for notes similar to the query using semantic search.
-        搜索结果返回笔记 ID（去重）和相似度分数。
+        Search for similar notes using pgvector cosine similarity.
 
         Args:
+            db: Database session
             query: Search query text
-            n_results: Number of note results (not chunks) to return
+            n_results: Maximum number of results to return
 
         Returns:
-            List of dictionaries with keys: note_id, score
+            List of dictionaries with note_id and similarity score (0-1)
         """
         # Generate query embedding
         query_embedding = self.embeddings.embed_query(query)
 
-        # Search in collection (搜索 chunks，返回更多结果以便去重)
-        results = self.collection.query(
-            query_embeddings=[query_embedding],
-            n_results=n_results * 3  # 多取一些，因为同一笔记可能有多个匹配的块
-        )
+        # Use pgvector's cosine distance operator (<=>)
+        # Cosine distance = 1 - cosine similarity
+        # So similarity = 1 - distance
+        results = db.execute(
+            text("""
+                SELECT
+                    ne.note_id,
+                    1 - (ne.embedding <=> :query_vector::vector) as similarity
+                FROM note_embeddings ne
+                ORDER BY ne.embedding <=> :query_vector::vector
+                LIMIT :limit
+            """),
+            {
+                "query_vector": str(query_embedding),
+                "limit": n_results
+            }
+        ).fetchall()
 
-        # Parse chunk IDs and aggregate by note_id
-        note_scores = {}  # {note_id: max_score}
+        return [
+            {"note_id": row[0], "score": float(row[1])}
+            for row in results
+        ]
 
-        if results and results['ids']:
-            for i, chunk_id in enumerate(results['ids'][0]):
-                # 解析 chunk_id: "note_id#chunk_index"
-                try:
-                    note_id_str, _ = chunk_id.split('#')
-                    note_id = int(note_id_str)
+    def get_embedding_count(self, db: Session) -> int:
+        """
+        Get total number of note embeddings in the database.
 
-                    # 计算相似度分数（距离转换为相似度）
-                    score = 1 - results['distances'][0][i]
+        Args:
+            db: Database session
 
-                    # 同一笔记取最高分数的 chunk
-                    if note_id not in note_scores or score > note_scores[note_id]:
-                        note_scores[note_id] = score
-                except ValueError:
-                    # 兼容旧格式（如果有的话）
-                    continue
-
-        # 按分数排序并返回前 n_results 个笔记
-        sorted_notes = sorted(
-            [{"note_id": nid, "score": score} for nid, score in note_scores.items()],
-            key=lambda x: x["score"],
-            reverse=True
-        )
-
-        return sorted_notes[:n_results]
+        Returns:
+            Count of embeddings
+        """
+        return db.query(NoteEmbedding).count()
 
 
 @lru_cache()

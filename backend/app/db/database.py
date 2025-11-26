@@ -1,23 +1,19 @@
 """
-Database connection and session management.
+Database connection and session management for PostgreSQL + pgvector.
 """
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from typing import Generator
 
 from app.core.config import settings
 
-# Create SQLite engine with UTF-8 encoding support
+# Create PostgreSQL engine with connection pooling
 engine = create_engine(
     settings.DATABASE_URL,
-    connect_args={
-        "check_same_thread": False,  # Needed for SQLite
-        "timeout": 30,  # Increase timeout for better concurrency
-    },
-    echo=False,  # Disabled to avoid Windows console encoding issues with Chinese characters
     pool_pre_ping=True,  # Enable connection health checks
-    # Note: SQLite uses UTF-8 by default, but we ensure JSON response encoding in FastAPI
+    pool_size=5,  # Number of connections to keep open
+    max_overflow=10,  # Max additional connections when pool is exhausted
+    echo=False,  # Set to True for SQL debugging
 )
 
 # Create session factory
@@ -45,10 +41,23 @@ def get_db() -> Generator[Session, None, None]:
 
 def init_db() -> None:
     """
-    Initialize database by creating all tables.
+    Initialize database by creating pgvector extension and all tables.
     Should be called on application startup.
     """
     from app.db import models  # Import models to register them
+
+    # Create pgvector extension (requires superuser or extension creation privileges)
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.commit()
+            print("pgvector extension created or already exists")
+    except Exception as e:
+        print(f"Warning: Could not create pgvector extension: {e}")
+        print("Please ensure pgvector is installed on your PostgreSQL server")
+        print("Run: CREATE EXTENSION IF NOT EXISTS vector;")
+
+    # Create all tables
     Base.metadata.create_all(bind=engine)
 
     # Create default "Default" project if it doesn't exist
