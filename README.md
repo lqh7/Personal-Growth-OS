@@ -32,8 +32,8 @@
 ### 后端
 - **FastAPI** - 高性能Python Web框架
 - **Agno** - 轻量级AI多智能体框架
-- **SQLAlchemy** + **SQLite** - 关系数据库
-- **ChromaDB** - 向量数据库（RAG知识检索）
+- **SQLAlchemy** + **PostgreSQL** - 关系数据库（云端部署）
+- **pgvector** - PostgreSQL向量扩展（RAG知识检索）
 
 ### AI集成
 - **可配置LLM提供商**: 支持OpenAI、Claude、Ollama（本地）
@@ -62,9 +62,12 @@ cd Personal-Growth-OS
 cp .env.example .env
 ```
 
-编辑 `.env` 文件，配置你的LLM提供商：
+编辑 `.env` 文件，配置数据库和LLM提供商：
 
 ```env
+# PostgreSQL数据库配置 (必需)
+DATABASE_URL=postgresql://username:password@your-cloud-db-host:5432/personal_growth_os
+
 # 选择LLM提供商: openai, claude, 或 ollama
 LLM_PROVIDER=openai
 
@@ -77,6 +80,14 @@ ANTHROPIC_API_KEY=your_api_key_here
 # 如果使用本地Ollama
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.1:8b
+
+# Embedding模型 (用于语义搜索)
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+```
+
+**注意**: 请确保你的PostgreSQL服务器已安装pgvector扩展：
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
 ### 3. 启动后端
@@ -187,9 +198,32 @@ Personal-Growth-OS/
 └── README.md             # 本文件
 ```
 
-## 开发指南
+## 文档导航
 
-详见 [CLAUDE.md](./CLAUDE.md) 了解项目架构和开发规范。
+### 面向开发者
+
+- **[CLAUDE.md](./CLAUDE.md)** - Claude Code开发指南，包含项目架构、开发规范、命令速查
+- **[系统现状总结](./doc/系统现状总结.md)** ⭐ - **当前实际系统状态**，反映真实代码实现
+- **[.env.README.md](./.env.README.md)** - 环境配置文件说明（`.env.example` vs `backend/.env`）
+
+### 设计文档（包含已实现和未来规划）
+
+- **[需求文档](./doc/需求.md)** - 产品需求和三大支柱设计
+- **[工程架构](./doc/工程架构.md)** - 整体技术架构
+- **[后端详细设计](./doc/后端详细设计.md)** - 后端架构和AI Agent设计（含未来规划）
+- **[前端详细设计](./doc/前端详细设计.md)** - 前端组件和状态管理设计
+- **[日程表详细设计](./doc/日程表详细设计.md)** - 日程表功能实现细节
+- **[AI认知助手架构设计](./doc/AI认知助手架构设计.md)** - AI助手架构愿景（含未来规划）
+- **[Agent详细设计](./doc/Agent详细设计.md)** - Agent系统设计（技术演进记录）
+
+### 快速参考
+
+- **当前系统实现**: 查看 [系统现状总结](./doc/系统现状总结.md)
+- **开发环境配置**: 查看本文件"快速开始"章节 + [.env.README.md](./.env.README.md)
+- **API调用示例**: 查看本文件"核心功能演示"章节或访问 http://localhost:8000/docs
+- **代码贡献规范**: 查看 [CLAUDE.md](./CLAUDE.md)
+
+**注意**: 设计文档中部分内容描述的是未来愿景架构，实际代码实现可能更简化（MVP阶段）。以 `系统现状总结.md` 和实际代码为准。
 
 ## MVP限制
 

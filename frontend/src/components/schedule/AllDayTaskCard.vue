@@ -8,7 +8,7 @@
   >
     <template #reference>
       <div
-        class="allday-task-card"
+        class="schedule-allday-task-card"
         :style="taskStyle"
         @click="$emit('task-click', task)"
       >
@@ -80,12 +80,23 @@ const emit = defineEmits<{
 // Computed
 // ============================================
 
+// Helper function: Convert hex color to rgba with opacity
+function hexToRgba(hex: string, opacity: number): string {
+  hex = hex.replace('#', '')
+  const r = parseInt(hex.substring(0, 2), 16)
+  const g = parseInt(hex.substring(2, 4), 16)
+  const b = parseInt(hex.substring(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`
+}
+
 const taskStyle = computed(() => {
-  const backgroundColor = props.task.project?.color || '#667eea' // 默认紫色
-  const opacity = 0.25 + (props.task.priority * 0.15)
+  const hexColor = props.task.project?.color || '#667eea' // 默认紫色
+  // 项目颜色 + 优先级透明度
+  // 公式: 0.5 + (priority × 0.1)，范围 0.5-1.0
+  // 优先级0=50%, 优先级5=100%
+  const opacity = Math.min(1.0, 0.5 + (props.task.priority * 0.1))
   return {
-    backgroundColor,
-    opacity
+    backgroundColor: hexToRgba(hexColor, opacity)
   }
 })
 
@@ -129,7 +140,8 @@ $transition-fast: 0.15s ease;
 $font-size-xs: 12px;
 $font-size-sm: 14px;
 
-.allday-task-card {
+// 使用独立的类名，避免与全局样式冲突
+.schedule-allday-task-card {
   height: 100%;
   display: flex;
   align-items: center;
@@ -141,17 +153,29 @@ $font-size-sm: 14px;
   white-space: nowrap;
   overflow: hidden;
 
+  // 增强对比度
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+
+  // 禁用任何伪元素覆盖
+  &::before,
+  &::after {
+    content: none !important;
+    display: none !important;
+  }
+
   &:hover {
-    opacity: 0.9;
+    filter: brightness(1.1);
     transform: translateY(-1px);
   }
 
   .task-title {
     font-size: 10px;
-    font-weight: 500;
+    font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   }
 }
 

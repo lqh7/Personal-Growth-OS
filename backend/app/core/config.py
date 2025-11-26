@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.1:8b"
 
+    # Common LLM Settings
+    TEMPERATURE: float = 0.7
+
     # Embedding Model
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
 
@@ -58,7 +61,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=True
+        case_sensitive=True,
+        extra="ignore"  # Ignore extra fields in .env to allow hot-reload
     )
 
 
@@ -66,6 +70,19 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Get cached settings instance."""
     return Settings()
+
+
+def reload_settings():
+    """
+    Reload settings from .env file by clearing cache and creating new instance.
+    This allows runtime configuration updates without restarting the service.
+    """
+    global settings
+    # Clear the lru_cache to force re-reading from .env
+    get_settings.cache_clear()
+    # Create new settings instance
+    settings = get_settings()
+    return settings
 
 
 # Global settings instance

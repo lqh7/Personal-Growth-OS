@@ -88,17 +88,18 @@ async def health_check():
 
 
 # Import and include routers
-from app.api.endpoints import tasks, notes, projects, attachments, links
+from app.api.endpoints import tasks, notes, projects, attachments, links, chat, settings as settings_router
 
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(attachments.router, prefix="/api/attachments", tags=["attachments"])
 app.include_router(links.router, prefix="/api/links", tags=["links"])
+app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
+app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
 
 # TODO: Additional routers to be implemented
-# from app.api.endpoints import chat, review
-# app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
+# from app.api.endpoints import review
 # app.include_router(review.router, prefix="/api/review", tags=["review"])
 
 

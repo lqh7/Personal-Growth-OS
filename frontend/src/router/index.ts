@@ -35,6 +35,12 @@ const router = createRouter({
           name: 'ReviewView',
           component: () => import('@/views/ReviewView.vue'),
           meta: { title: '复盘' }
+        },
+        {
+          path: '/settings',
+          name: 'Settings',
+          component: () => import('@/views/SettingsView.vue'),
+          meta: { title: '设置' }
         }
       ]
     }

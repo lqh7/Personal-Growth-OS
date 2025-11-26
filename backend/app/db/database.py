@@ -62,7 +62,7 @@ def init_db() -> None:
             default_project = models.Project(
                 name="默认",
                 description="默认项目，用于存放未分类的任务",
-                color="#999999",
+                color="#667eea",
                 is_system=True  # Mark as system project - cannot be deleted or edited
             )
             db.add(default_project)

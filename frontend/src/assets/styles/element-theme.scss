@@ -1,0 +1,336 @@
+// ============================================
+// Element Plus 主题覆盖 - 中国风柔和色彩
+// ============================================
+@import './variables.scss';
+
+// 全局CSS变量覆盖
+:root {
+  // 主题色 - 粉青青瓷系
+  --el-color-primary: #88b3a8;
+  --el-color-primary-light-3: #a8c5ba;
+  --el-color-primary-light-5: #b8d4c9;
+  --el-color-primary-light-7: #d0e4dc;
+  --el-color-primary-light-8: #e0eee8;
+  --el-color-primary-light-9: #f0f7f4;
+  --el-color-primary-dark-2: #6a9688;
+
+  // 功能色
+  --el-color-success: #7fa89d;
+  --el-color-warning: #d9a76a;
+  --el-color-danger: #c18a7a;
+  --el-color-info: #9eb3bf;
+
+  // 文本色 - 水墨系
+  --el-text-color-primary: #3a3a3a;
+  --el-text-color-regular: #5a5a5a;
+  --el-text-color-secondary: #8a8a8a;
+  --el-text-color-placeholder: #b8b8b8;
+
+  // 边框色
+  --el-border-color: #d9d4c9;
+  --el-border-color-light: #e8e4d9;
+  --el-border-color-lighter: #f0ede6;
+  --el-border-color-extra-light: #f5f3ed;
+
+  // 背景色
+  --el-bg-color: #fdfcf8;
+  --el-bg-color-page: #f5f3ed;
+  --el-bg-color-overlay: #fdfcf8;
+  --el-fill-color-blank: #fdfcf8;
+
+  // 圆角
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-border-radius-large: 12px;
+  --el-border-radius-round: 100px;
+
+  // 字体 - 清晰可读
+  --el-font-family: 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei',
+    'Hiragino Sans GB', -apple-system, BlinkMacSystemFont, sans-serif;
+  --el-font-size-base: 14px;
+  --el-font-size-small: 13px;
+  --el-font-size-large: 16px;
+  --el-font-size-extra-large: 18px;
+
+  // 阴影 - 水墨晕染
+  --el-box-shadow-light: 0 2px 8px rgba(106, 150, 136, 0.08), 0 1px 3px rgba(88, 179, 168, 0.06);
+  --el-box-shadow: 0 4px 16px rgba(106, 150, 136, 0.12), 0 2px 6px rgba(88, 179, 168, 0.08);
+  --el-box-shadow-dark: 0 8px 24px rgba(106, 150, 136, 0.15), 0 4px 12px rgba(88, 179, 168, 0.1);
+
+  // 过渡时间
+  --el-transition-duration: 0.3s;
+  --el-transition-duration-fast: 0.2s;
+}
+
+// ============================================
+// 按钮组件优化 - 水墨笔触感
+// ============================================
+.el-button {
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--el-border-color);
+  position: relative;
+  overflow: hidden;
+
+  // 水墨晕染背景效果
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle,
+      rgba(136, 179, 168, 0.2) 0%,
+      transparent 70%);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+    pointer-events: none;
+  }
+
+  &:hover::before {
+    width: 300px;
+    height: 300px;
+  }
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(136, 179, 168, 0.15);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  // 主要按钮 - 青瓷渐变
+  &.el-button--primary {
+    background: linear-gradient(135deg, #88b3a8 0%, #7fa89d 50%, #9dc5b8 100%);
+    border: none;
+    color: white;
+    font-weight: 600;
+
+    &:hover {
+      background: linear-gradient(135deg, #7fa89d 0%, #6a9688 50%, #88b3a8 100%);
+    }
+  }
+
+  // 成功按钮
+  &.el-button--success {
+    background: linear-gradient(135deg, #7fa89d 0%, #88b3a8 100%);
+    border: none;
+  }
+
+  // 警告按钮
+  &.el-button--warning {
+    background: linear-gradient(135deg, #d9a76a 0%, #c49558 100%);
+    border: none;
+  }
+
+  // 危险按钮
+  &.el-button--danger {
+    background: linear-gradient(135deg, #c18a7a 0%, #b07868 100%);
+    border: none;
+  }
+}
+
+// ============================================
+// 输入框组件优化 - 瓷器质感
+// ============================================
+.el-input__wrapper {
+  background: linear-gradient(145deg,
+    rgba(253, 252, 248, 1) 0%,
+    rgba(253, 252, 248, 0.98) 100%);
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--el-border-radius-base);
+  box-shadow: inset 0 1px 3px rgba(136, 179, 168, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    border-color: #a8c5ba;
+    box-shadow: 0 0 0 2px rgba(136, 179, 168, 0.1);
+  }
+
+  &.is-focus {
+    border-color: var(--el-color-primary);
+    box-shadow: 0 0 0 3px rgba(136, 179, 168, 0.15);
+  }
+}
+
+.el-textarea__inner {
+  background: linear-gradient(145deg,
+    rgba(253, 252, 248, 1) 0%,
+    rgba(253, 252, 248, 0.98) 100%);
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--el-border-radius-base);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    border-color: #a8c5ba;
+  }
+
+  &:focus {
+    border-color: var(--el-color-primary);
+    box-shadow: 0 0 0 3px rgba(136, 179, 168, 0.15);
+  }
+}
+
+// ============================================
+// 卡片组件优化 - 宣纸质感
+// ============================================
+.el-card {
+  background: linear-gradient(145deg,
+    rgba(253, 252, 248, 1) 0%,
+    rgba(253, 252, 248, 0.98) 100%);
+  border: 1px solid rgba(217, 212, 201, 0.3);
+  border-radius: var(--el-border-radius-large);
+  box-shadow: 0 2px 8px rgba(106, 150, 136, 0.08), 0 1px 3px rgba(88, 179, 168, 0.06);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  position: relative;
+
+  // 瓷器光泽
+  &::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle,
+      rgba(255, 255, 255, 0.3) 0%,
+      transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(106, 150, 136, 0.12), 0 4px 12px rgba(88, 179, 168, 0.08);
+
+    &::before {
+      opacity: 0.5;
+    }
+  }
+}
+
+// ============================================
+// 对话框优化 - 水墨边框
+// ============================================
+.el-dialog {
+  background: linear-gradient(145deg,
+    rgba(253, 252, 248, 1) 0%,
+    rgba(249, 247, 241, 0.98) 100%);
+  border-radius: var(--el-border-radius-large);
+  border: 2px solid rgba(136, 179, 168, 0.2);
+  box-shadow: 0 12px 48px rgba(106, 150, 136, 0.2), 0 6px 24px rgba(88, 179, 168, 0.15);
+  backdrop-filter: blur(20px);
+
+  .el-dialog__header {
+    border-bottom: 1px solid var(--el-border-color);
+    padding: 24px;
+    position: relative;
+
+    // 水墨装饰线
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 10%;
+      width: 80%;
+      height: 2px;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(136, 179, 168, 0.3) 50%,
+        transparent 100%);
+    }
+  }
+
+  .el-dialog__title {
+    font-family: 'LXGW WenKai', 'Long Cang', sans-serif;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+    letter-spacing: 1px;
+  }
+}
+
+// ============================================
+// 标签组件优化 - 印章感
+// ============================================
+.el-tag {
+  border-radius: 6px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  border: 1px solid currentColor;
+  background: transparent;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &.el-tag--primary {
+    color: var(--el-color-primary);
+    background: rgba(136, 179, 168, 0.1);
+
+    &:hover {
+      background: rgba(136, 179, 168, 0.2);
+    }
+  }
+
+  &:hover {
+    transform: scale(1.05);
+  }
+}
+
+// ============================================
+// 下拉菜单优化 - 宣纸质感
+// ============================================
+.el-dropdown-menu {
+  background: linear-gradient(145deg,
+    rgba(253, 252, 248, 1) 0%,
+    rgba(253, 252, 248, 0.98) 100%);
+  border: 1px solid rgba(217, 212, 201, 0.3);
+  border-radius: var(--el-border-radius-base);
+  box-shadow: 0 8px 24px rgba(106, 150, 136, 0.15), 0 4px 12px rgba(88, 179, 168, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 8px;
+
+  .el-dropdown-menu__item {
+    border-radius: 6px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &:hover {
+      background: rgba(136, 179, 168, 0.1);
+      color: var(--el-color-primary-dark-2);
+      transform: translateX(4px);
+    }
+  }
+}
+
+// ============================================
+// 消息提示优化 - 水墨晕染
+// ============================================
+.el-message {
+  border-radius: var(--el-border-radius-base);
+  box-shadow: 0 8px 24px rgba(106, 150, 136, 0.2), 0 4px 12px rgba(88, 179, 168, 0.15);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(136, 179, 168, 0.2);
+
+  &.el-message--success {
+    background: linear-gradient(135deg,
+      rgba(127, 168, 157, 0.95) 0%,
+      rgba(136, 179, 168, 0.95) 100%);
+  }
+
+  &.el-message--warning {
+    background: linear-gradient(135deg,
+      rgba(217, 167, 106, 0.95) 0%,
+      rgba(196, 149, 88, 0.95) 100%);
+  }
+
+  &.el-message--error {
+    background: linear-gradient(135deg,
+      rgba(193, 138, 122, 0.95) 0%,
+      rgba(176, 120, 104, 0.95) 100%);
+  }
+}

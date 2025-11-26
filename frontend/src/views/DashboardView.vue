@@ -1,7 +1,7 @@
 <template>
-  <div class="dashboard-view">
+  <div class="dashboard-view page-view">
     <!-- Header -->
-    <div class="dashboard-header">
+    <div class="dashboard-header page-header">
       <div class="header-left">
         <h1 class="page-title">工作台</h1>
         <p class="page-subtitle">{{ currentDate }} · {{ greeting }}</p>
@@ -9,7 +9,7 @@
     </div>
 
     <!-- Statistics Cards -->
-    <div class="stats-grid">
+    <div class="stats-grid grid-stagger">
       <div
         v-for="stat in stats"
         :key="stat.key"
@@ -31,9 +31,12 @@
     <!-- Main Content Grid -->
     <div class="content-grid">
       <!-- Week Schedule -->
-      <div class="schedule-section card">
+      <div class="schedule-section content-card">
         <div class="section-header">
-          <h3 class="section-title">本周日程</h3>
+          <h3 class="section-title">
+            <el-icon><Calendar /></el-icon>
+            本周日程
+          </h3>
           <el-button text type="primary" @click="router.push('/tasks')">查看更多</el-button>
         </div>
         <WeekSchedule
@@ -45,7 +48,7 @@
       </div>
 
       <!-- Snoozed Tasks (Floating Tasks) -->
-      <div class="floating-tasks-section card">
+      <div class="floating-tasks-section content-card">
         <div class="section-header">
           <h3 class="section-title">
             <el-icon><Clock /></el-icon>
@@ -93,7 +96,7 @@
       </div>
 
       <!-- Recent Activity -->
-      <div class="activity-section card">
+      <div class="activity-section content-card">
         <div class="section-header">
           <h3 class="section-title">最近动态</h3>
           <el-button text type="primary">查看全部</el-button>
@@ -118,7 +121,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Clock, InfoFilled, SuccessFilled } from '@element-plus/icons-vue'
+import { Clock, InfoFilled, SuccessFilled, Calendar } from '@element-plus/icons-vue'
 import WeekSchedule from '@/components/schedule/WeekSchedule.vue'
 import { useTaskStore } from '@/stores/taskStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -530,6 +533,9 @@ function formatSnoozeTime(date: Date): string {
 // ============================================
 .schedule-section {
   grid-column: 1 / -1;
+
+  // 日程表完整显示，不需要滚动
+  // 时间槽区域高度由内容决定 (13小时 × 60px = 780px)
 }
 
 // ============================================

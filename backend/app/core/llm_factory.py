@@ -7,8 +7,8 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_anthropic import ChatAnthropic
 from langchain_community.chat_models import ChatOllama
 from langchain_community.embeddings import OllamaEmbeddings
-from langchain.schema.language_model import BaseLanguageModel
-from langchain.schema.embeddings import Embeddings
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.embeddings import Embeddings
 
 from .config import settings
 
@@ -128,3 +128,44 @@ def get_chat_model(temperature: float = 0.7, **kwargs) -> BaseLanguageModel:
 def get_embeddings(**kwargs) -> Embeddings:
     """Get the default embeddings model configured in settings."""
     return LLMFactory.create_embeddings(**kwargs)
+
+
+def get_chat_model_config() -> dict:
+    """
+    Get chat model configuration dictionary for frameworks that need raw config.
+
+    Returns:
+        dict: Configuration dictionary with model, api_key, and base_url
+    """
+    provider = settings.LLM_PROVIDER
+
+    if provider == "openai":
+        config = {
+            "model": settings.OPENAI_MODEL,
+            "api_key": settings.OPENAI_API_KEY,
+        }
+        if settings.OPENAI_API_BASE:
+            config["base_url"] = settings.OPENAI_API_BASE
+        return config
+
+    elif provider == "claude":
+        config = {
+            "model": settings.ANTHROPIC_MODEL,
+            "api_key": settings.ANTHROPIC_API_KEY,
+        }
+        if settings.ANTHROPIC_API_BASE:
+            config["base_url"] = settings.ANTHROPIC_API_BASE
+        return config
+
+    elif provider == "ollama":
+        return {
+            "model": settings.OLLAMA_MODEL,
+            "base_url": settings.OLLAMA_BASE_URL,
+        }
+
+    else:
+        # Default to OpenAI config
+        return {
+            "model": settings.OPENAI_MODEL,
+            "api_key": settings.OPENAI_API_KEY,
+        }

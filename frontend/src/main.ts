@@ -10,6 +10,8 @@ import { templateStorage } from './services/templateStorage'
 
 // 导入全局样式
 import '@/assets/styles/global.scss'
+// 导入Element Plus主题覆盖样式
+import '@/assets/styles/element-theme.scss'
 
 // Initialize built-in templates on app startup
 templateStorage.initializeBuiltinTemplates()

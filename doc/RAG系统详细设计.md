@@ -2,10 +2,12 @@
 
 > **📌 实施状态说明**
 > - **当前实现**: ⏸️ **部分实现** - 基础RAG功能已就绪
+> - **数据库**: ✅ 已迁移到 **PostgreSQL + pgvector** (云端部署)
 > - **已实现功能**:
->   - ✅ ChromaDB向量存储 (`services/vector_store.py`)
+>   - ✅ pgvector向量存储 (`services/vector_store.py`)
 >   - ✅ 笔记语义搜索API (`/notes/search/semantic`)
 >   - ✅ 基础向量化和检索功能
+>   - ✅ 向量索引优化 (IVFFlat)
 > - **未实现功能**:
 >   - ❌ 智能分块策略 (NoChunking/MarkdownAware/RecursiveCharacter)
 >   - ❌ 上下文窗口扩展
@@ -13,7 +15,7 @@
 >   - ❌ Markdown感知分块
 >   - ❌ 文本分块服务 (`chunking.py` 已创建但未与RAG集成)
 >
-> 本文档描述了**增强型RAG系统的目标架构**。当前仅实现了基础的全文向量化和语义搜索。
+> 本文档描述了**增强型RAG系统的目标架构**。当前仅实现了基础的全文向量化和pgvector语义搜索。
 
 ---
 
@@ -755,8 +757,8 @@ function expand_context(chunk, expansion_size=1):
 
 | 组件 | 当前技术 | 保持/更换 | 理由 |
 |------|---------|----------|------|
-| **向量数据库** | ChromaDB | ✅ 保持 | 已集成，轻量级，满足需求 |
-| **Embedding模型** | OpenAI text-embedding-3-small | ✅ 保持 | 性价比高，1536维 |
+| **向量数据库** | **PostgreSQL + pgvector** | ✅ 已迁移 | 统一数据库,云端部署,事务一致性 |
+| **Embedding模型** | all-MiniLM-L6-v2 (384维) | ✅ 保持 | 开源,轻量级,本地推理 |
 | **文本分块** | (无) | ➕ 新增 LangChain TextSplitters | 成熟的分块工具库 |
 | **Markdown解析** | (无) | ➕ 新增 markdown-it-py | 轻量级Markdown解析器 |
 | **Reranking** | (无) | ➕ Phase 3引入 Cohere Rerank | 提升检索精度 |
@@ -778,37 +780,66 @@ cohere>=4.0.0                    # Cohere Rerank API
 sentence-transformers>=2.2.0     # 本地Cross-Encoder模型（备选）
 ```
 
-### 6.3 ChromaDB配置优化
+### 6.3 PostgreSQL + pgvector配置优化
 
 **当前配置**:
 ```python
-chromadb.Client(Settings(
-    chroma_db_impl="duckdb+parquet",
-    persist_directory="./chroma_data"
-))
+# database.py
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+engine = create_engine(SQLALCHEMY_DATABASE_URL)
+
+# 创建pgvector扩展
+CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
 **优化建议**（Phase 2）:
 
-1. **启用元数据索引**
+1. **向量索引优化**
+   ```sql
+   -- 创建IVFFlat索引 (适合10k+向量)
+   CREATE INDEX note_embeddings_embedding_idx
+     ON note_embeddings
+     USING ivfflat (embedding vector_cosine_ops)
+     WITH (lists = 100);
+
+   -- 或使用HNSW索引 (PostgreSQL 15+, 更快但内存占用高)
+   CREATE INDEX note_embeddings_embedding_hnsw_idx
+     ON note_embeddings
+     USING hnsw (embedding vector_cosine_ops);
+   ```
+
+2. **连接池配置**
    ```python
-   collection = client.get_or_create_collection(
-       name="knowledge_base",
-       metadata={
-           "description": "Personal Growth OS RAG system",
-           "hnsw:space": "cosine",  # 使用余弦相似度
-           "hnsw:M": 16,             # 连接数（平衡精度和速度）
-       }
+   # 优化数据库连接池 (适合高并发向量查询)
+   engine = create_engine(
+       DATABASE_URL,
+       pool_size=20,        # 连接池大小
+       max_overflow=10,     # 允许超过pool_size的连接数
+       pool_pre_ping=True   # 检测连接有效性
    )
    ```
 
-2. **批量插入优化**
-   - 单次插入chunk数量限制：100个/batch
-   - 避免频繁小批量插入（影响索引构建效率）
+3. **批量插入优化**
+   ```python
+   # 使用COPY或批量INSERT提升性能
+   from sqlalchemy import insert
 
-3. **定期维护**
-   - 每月运行一次 `collection.compact()`（去除已删除数据）
-   - 监控collection大小，超过10万个chunk时考虑分片
+   # 批量插入embeddings (100条/batch)
+   stmt = insert(NoteEmbedding).values(embeddings_batch)
+   session.execute(stmt)
+   ```
+
+4. **定期维护**
+   ```sql
+   -- 更新统计信息 (优化查询计划)
+   ANALYZE note_embeddings;
+
+   -- 清理死元组
+   VACUUM note_embeddings;
+
+   -- 重建索引 (数据量增长后)
+   REINDEX INDEX note_embeddings_embedding_idx;
+   ```
 
 ---
 

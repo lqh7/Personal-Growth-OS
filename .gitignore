@@ -86,3 +86,4 @@ backend/uploads/
 
 # Test directories
 tests/
+test_mg/

@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Personal Growth OS** is a "second brain" application designed to accelerate personal growth by helping users combat procrastination, solidify knowledge, and drive continuous self-improvement through data-driven reflection.
 
-**Current Status**: MVP in active development. Backend uses LangGraph for AI agents, with ChromaDB for RAG. Frontend features weekly schedule view, task kanban with floating task column, and basic task management. Chinese character encoding is fully supported.
+**Current Status**: MVP in active development. Backend uses **Agno** for AI agents, with ChromaDB for RAG. Frontend features weekly schedule view, task kanban with floating task column, AI chat panel, and comprehensive task/note management. Chinese character encoding is fully supported.
+
+**IMPORTANT**: The actual implementation uses **Agno** framework, NOT LangGraph. Reference `backend/app/agents/task_igniter_agno.py` for the agent implementation pattern.
 
 ### Core Mission (Three Pillars)
 
@@ -28,13 +30,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Backend:**
 - FastAPI (Python 3.10+)
-- **LangGraph** (state-driven AI agent framework)
-- SQLAlchemy + SQLite
-- ChromaDB (vector store for RAG)
+- **Agno** (lightweight AI agent framework)
+- SQLAlchemy + **PostgreSQL** (cloud-hosted)
+- **pgvector** extension (vector similarity search)
 
 **Data Layer:**
-- **SQLite** - Structured data (tasks, notes metadata, projects, user config)
-- **ChromaDB** - Vectorized document chunks for semantic search
+- **PostgreSQL + pgvector** - Unified database solution (cloud-hosted)
+  - Structured data: tasks, notes, projects, user config
+  - Vector data: note embeddings for semantic search
+  - Advantages: Single data source, ACID transactions, cloud backup
 
 ### Architectural Principles
 
@@ -43,8 +47,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - API Layer (`/app/api/endpoints/`) - Request handling and validation
   - Service Layer (`/app/services/`) - Core business logic
   - Data Access Layer (`/app/crud/`) - Database operations abstraction
-- **Separation of Concerns**: Complex business logic encapsulated as LangGraph StateGraphs
-- **State-First**: Use LangGraph's TypedDict states and node-based processing for AI workflows
+- **Separation of Concerns**: Complex AI logic encapsulated as Agno Agents with declarative configuration
+- **Agent-First**: Use Agno's declarative agent definitions with automatic tool management and user memory
 
 ## Development Commands
 
@@ -203,11 +207,11 @@ Core entities with relationships:
 
 ### Critical Features
 
-1. **Task Ignition Ritual (任务启动仪式)** - IMPLEMENTED (LangGraph)
-   - Automatic task decomposition for vague/large tasks via LangGraph StateGraph
-   - Auto-retrieval of related historical notes from knowledge base (planned)
+1. **Task Ignition Ritual (任务启动仪式)** - IMPLEMENTED (Agno)
+   - Automatic task decomposition for vague/large tasks via Agno Agent
+   - Tool-based knowledge retrieval (search_knowledge_base, format_task_summary)
    - Generation of "minimum viable starting task" to reduce action friction
-   - **Implementation**: `backend/app/agents/task_igniter_agent.py` using LangGraph nodes and conditional routing
+   - **Implementation**: `backend/app/agents/task_igniter_agno.py` using Agno declarative agent with function tools
 
 2. **Calendar/Schedule View (日程管理)** - IMPLEMENTED
    - Weekly schedule visualization with time-slot planning (8:00-21:00 viewport)
@@ -246,6 +250,19 @@ Core entities with relationships:
    - Data-driven insight modules: task patterns, procrastination detection
    - ECharts integration ready in frontend
 
+8. **AI Chat Interface (AI对话助手)** - IMPLEMENTED
+   - Collapsible chat panel integrated into main layout
+   - SSE (Server-Sent Events) streaming for real-time responses
+   - Session management with persistent chat history
+   - Integration with Task Igniter Agent
+   - **Implementation**: `frontend/src/components/chat/` + `backend/app/api/endpoints/chat.py`
+
+9. **Settings Management (配置管理)** - IMPLEMENTED
+   - Frontend settings page for LLM configuration
+   - Support for multiple providers (OpenAI/Claude/Ollama)
+   - Auto-save to `backend/.env` with hot-reload
+   - **Implementation**: `frontend/src/views/SettingsView.vue` + `backend/app/api/endpoints/settings.py`
+
 ## Architecture Implementation Details
 
 ### Backend Structure
@@ -268,15 +285,17 @@ backend/app/
 │   ├── crud_note.py
 │   └── crud_project.py
 ├── services/               # Business logic layer
-│   ├── vector_store.py     # ChromaDB integration
+│   ├── vector_store.py     # pgvector integration (semantic search)
 │   ├── memory_service.py   # Memory management (legacy)
 │   ├── file_storage.py     # File upload/download service
 │   └── chunking.py         # Text chunking service (for RAG)
-├── agents/                 # LangGraph agents
-│   └── task_igniter_agent.py  # Task decomposition StateGraph
+├── agents/                 # Agno agents
+│   └── task_igniter_agno.py  # Task decomposition Agno Agent
 └── api/endpoints/          # FastAPI routers
     ├── tasks.py            # Task CRUD + /ignite endpoint
     ├── notes.py            # Note CRUD + semantic search
+    ├── chat.py             # AI chat interface (SSE streaming)
+    ├── settings.py         # LLM configuration management
     ├── attachments.py      # Attachment management
     ├── links.py            # Note linking system
     └── projects.py         # Project CRUD
@@ -297,22 +316,25 @@ frontend/src/
 │   ├── NotesView.vue       # Note management
 │   └── ReviewView.vue      # Review dashboard
 ├── components/
-│   ├── tasks/              # Task list/Kanban components (TaskList, TaskCard)
-│   ├── notes/              # Note list components (NoteCard)
-│   ├── schedule/           # Calendar/schedule components (WeekSchedule, TaskCard, AllDayTaskCard, AggregationBlock)
-│   ├── layout/             # Layout components (Sidebar, ChatPanel)
-│   └── (other domain components as needed)
+│   ├── tasks/              # Task list/Kanban components
+│   ├── notes/              # Note list components
+│   ├── schedule/           # Calendar/schedule components (WeekSchedule, AllDayTaskCard, AggregationBlock)
+│   ├── chat/               # AI chat components (ChatPanel, Messages, SessionList)
+│   └── layout/             # Layout components (Sidebar)
 ├── stores/                 # Pinia state management
 │   ├── taskStore.ts        # Task state, CRUD operations
 │   ├── noteStore.ts        # Note state
 │   ├── projectStore.ts     # Project state
-│   ├── chatStore.ts        # Chat history
-│   └── uiStore.ts          # UI preferences (sidebar, theme)
+│   ├── chatStore.ts        # Chat history and streaming
+│   ├── settingsStore.ts    # LLM configuration
+│   └── uiStore.ts          # UI preferences (sidebar, chat panel)
 ├── api/
 │   └── client.ts           # Axios client with base URL
 ├── composables/            # Vue composables (reusable logic)
 │   ├── useKeyboardShortcuts.ts  # Global keyboard shortcuts
-│   └── useTaskAdapter.ts   # Task data transformation
+│   ├── useTaskAdapter.ts   # Task data transformation
+│   ├── useChatStream.ts    # SSE streaming for chat
+│   └── useStreamParser.ts  # Parse streaming JSON responses
 ├── types/
 │   └── index.ts            # TypeScript type definitions
 ├── utils/                  # Utility functions
@@ -321,58 +343,59 @@ frontend/src/
 
 ## Key Architectural Patterns
 
-### LangGraph Agent Pattern
+### Agno Agent Pattern
 
-The Task Igniter Agent (backend/app/agents/task_igniter_agent.py:1) demonstrates the LangGraph pattern:
+The Task Igniter Agent (backend/app/agents/task_igniter_agno.py:1) demonstrates the Agno pattern:
 
-1. **State Definition**: Use TypedDict to define agent state
+1. **Tool Definition**: Define Python functions that agents can call
    ```python
-   from typing import TypedDict, Annotated
-   from operator import add
+   def search_knowledge_base(query: str, limit: int = 5) -> List[Dict[str, Any]]:
+       """Search the knowledge base for related notes."""
+       # Implementation
+       return results
 
-   class TaskIgniterState(TypedDict):
-       user_input: str
-       main_task_title: str
-       main_task_description: str
-       subtasks: Annotated[List[Dict], add]  # Reducer for accumulation
-       status: Literal["init", "analyzing", "decomposing", "completed", "error"]
+   def format_task_summary(main_title: str, subtasks: List[Dict]) -> str:
+       """Format task decomposition results."""
+       # Implementation
+       return formatted_summary
    ```
 
-2. **Node Functions**: Each node is a pure function that receives state and returns updates
+2. **Agent Creation**: Declarative configuration with OpenAI-compatible model
    ```python
-   def analyze_task_node(state: TaskIgniterState) -> Dict[str, Any]:
-       llm = get_chat_model(temperature=0.7)
-       response = llm.invoke(prompt)
-       return {
-           "main_task_title": result["title"],
-           "status": "analyzing"
-       }
+   from agno.agent import Agent
+   from agno.models.openai import OpenAIChat
+
+   model = OpenAIChat(
+       id="gpt-4",
+       api_key=settings.OPENAI_API_KEY,
+       base_url=settings.OPENAI_API_BASE
+   )
+
+   agent = Agent(
+       id="task-igniter",
+       name="Task Igniter Agent",
+       model=model,
+       instructions="你是一个任务分解专家...",
+       tools=[search_knowledge_base, format_task_summary],
+       markdown=True,
+       stream_intermediate_steps=True
+   )
    ```
 
-3. **Graph Building**: Assemble nodes with edges and conditional routing
+3. **Execution**:
    ```python
-   from langgraph.graph import StateGraph, START, END
+   # Synchronous
+   response = agent.run(user_input, stream=False)
 
-   builder = StateGraph(TaskIgniterState)
-   builder.add_node("analyze_task", analyze_task_node)
-   builder.add_node("decompose_task", decompose_task_node)
-   builder.add_edge(START, "analyze_task")
-   builder.add_conditional_edges("analyze_task", route_function)
-   graph = builder.compile()
-   ```
-
-4. **Execution**:
-   ```python
-   result = graph.invoke(initial_state)
-   # Or async:
-   result = await graph.ainvoke(initial_state)
+   # Asynchronous
+   response = await agent.arun(user_input, stream=False)
    ```
 
 **Key Principles**:
-- State is immutable - nodes return partial updates
-- Use `Annotated[Type, reducer]` for list/dict accumulation
-- Conditional edges enable dynamic routing based on state
-- Checkpointing can be added for state persistence
+- Declarative agent configuration (no manual state management)
+- Functions passed directly as tools (automatic schema generation)
+- Built-in streaming and markdown support
+- OpenAI-compatible API for multiple LLM providers
 
 ### LLM Provider Integration
 
@@ -429,13 +452,41 @@ export const useTaskStore = defineStore('task', () => {
 
 ### Database & Memory Architecture
 
-**SQLite** (single file: `personal_growth_os.db`):
-- Tasks, notes metadata, projects (SQLAlchemy managed)
-- User profile and preferences
+**PostgreSQL + pgvector** (cloud-hosted):
+- **Relational tables**: tasks, notes, projects, tags (SQLAlchemy ORM)
+- **Vector storage**: note_embeddings table with pgvector extension
+  - Embedding dimension: 384 (all-MiniLM-L6-v2 model)
+  - Index type: IVFFlat for fast similarity search
+  - Distance metric: Cosine similarity
+- **Benefits**:
+  - Single database eliminates sync issues between SQLite and ChromaDB
+  - ACID transactions ensure data consistency
+  - Cloud deployment enables remote access and automatic backups
+  - Native SQL joins between relational and vector data
 
-**ChromaDB** (directory: `chroma_data/`):
-- Vectorized note content for RAG
-- Knowledge embeddings for semantic search
+### SSE Streaming Architecture (Chat Interface)
+
+The chat interface uses Server-Sent Events (SSE) for real-time streaming:
+
+**Backend** (`backend/app/api/endpoints/chat.py`):
+- FastAPI `StreamingResponse` with `text/event-stream` content type
+- Agent responses streamed incrementally as they're generated
+- Event types: `RunStarted`, `RunContent`, `RunCompleted`, `ToolCallStarted`, etc.
+
+**Frontend** (`frontend/src/composables/useChatStream.ts`):
+- EventSource API for SSE connection
+- Incremental JSON parsing using brace counting
+- Automatic message assembly from partial chunks
+- Connection cleanup on component unmount
+
+**Format**:
+```
+data: {"event_type": "RunContent", "content": "partial text..."}
+
+data: {"event_type": "ToolCallStarted", "tool_name": "search_knowledge_base"}
+
+data: {"event_type": "RunCompleted", "final_response": "..."}
+```
 
 ## Implementation Guidelines
 
@@ -451,13 +502,13 @@ export const useTaskStore = defineStore('task', () => {
    - Register router in backend/app/main.py:1
    - Use dependency injection for `db: Session = Depends(get_db)`
 
-3. **AI Features using LangGraph**:
-   - Define state with TypedDict
-   - Create node functions (pure functions: state → partial update)
-   - Build StateGraph with nodes and edges
-   - Add conditional routing for dynamic flows
-   - Compile graph and expose via API endpoint
-   - Reference backend/app/agents/task_igniter_agent.py:1 for pattern
+3. **AI Features using Agno**:
+   - Define tool functions (plain Python functions with docstrings)
+   - Create Agent with declarative configuration
+   - Pass tools as list of function references
+   - Configure model (OpenAI-compatible)
+   - Expose via API endpoint (sync or async)
+   - Reference backend/app/agents/task_igniter_agno.py:1 for pattern
 
 4. **Frontend Features**:
    - Create components in frontend/src/components/
@@ -467,15 +518,46 @@ export const useTaskStore = defineStore('task', () => {
 
 ### Configuration Management
 
-All settings via environment variables in `.env`:
-- Copy `.env.example` to `.env`
-- **Required**: `LLM_PROVIDER=openai|claude|ollama`
-- **Required**: API keys for chosen provider
-- **Optional**: Custom API endpoints (`OPENAI_API_BASE`, `ANTHROPIC_API_BASE`)
-- ChromaDB path: `CHROMA_PERSIST_DIRECTORY=./chroma_data`
-- Database path: `DATABASE_URL=sqlite:///./personal_growth_os.db`
+**Two-File Configuration System**:
 
-Access via backend/app/core/config.py:1 `settings` object (Pydantic with validation).
+1. **`.env.example`** (project root) - Template with documentation
+   - Committed to Git
+   - Contains placeholder API keys
+   - Includes all advanced options (database, vector store, etc.)
+   - Use as reference for available settings
+
+2. **`backend/.env`** - Actual runtime configuration
+   - **NOT committed to Git** (.gitignore)
+   - Contains real API keys
+   - Auto-generated by frontend Settings page
+   - This is the file FastAPI reads
+
+**Configuration Methods**:
+
+**Method 1: Frontend Settings Page (Recommended)**
+1. Start backend and frontend
+2. Navigate to http://localhost:5173/settings
+3. Configure LLM provider and API key
+4. Click "Save" - auto-writes to `backend/.env`
+5. Hot-reload - no restart needed
+
+**Method 2: Manual Configuration**
+```bash
+cp .env.example backend/.env
+# Edit backend/.env with real API keys
+# Restart backend service
+```
+
+**Key Settings**:
+- `LLM_PROVIDER=openai|claude|ollama` (required)
+- `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` (required for respective provider)
+- `OPENAI_API_BASE` / `ANTHROPIC_API_BASE` (optional, for custom endpoints)
+- `DATABASE_URL=postgresql://user:password@host:5432/dbname` (required, cloud PostgreSQL)
+- `EMBEDDING_MODEL=all-MiniLM-L6-v2` (for local embedding generation)
+
+Access via `backend/app/core/config.py:1` `settings` object (Pydantic with validation).
+
+**IMPORTANT**: Always edit `backend/.env`, not the root `.env.example`!
 
 ### Error Handling Patterns
 
@@ -496,21 +578,21 @@ try {
 }
 ```
 
-## LangGraph Best Practices
+## Agno Best Practices
 
-1. **State Design**: Keep state flat and use TypedDict for type safety
-2. **Pure Nodes**: Nodes should be pure functions without side effects in state computation
-3. **Reducers**: Use `Annotated[List[X], add]` for accumulating lists across nodes
-4. **Error Handling**: Use status fields in state and conditional routing to error nodes
-5. **Visualization**: Use `graph.get_graph().draw_mermaid()` for debugging and documentation
-6. **LLM Calls**: Use `get_chat_model()` factory for consistent LLM access across nodes
+1. **Tool Design**: Keep tools focused and single-purpose with clear docstrings
+2. **Type Hints**: Use Python type hints for automatic schema generation
+3. **Instructions**: Write clear, detailed system instructions in Chinese for better results
+4. **Model Config**: Use OpenAI-compatible models via `OpenAIChat` wrapper
+5. **Streaming**: Enable `stream_intermediate_steps=True` for transparent tool calls
+6. **Error Handling**: Let Agno handle retries; implement graceful fallbacks in tools
 
 ## Testing and Quality Assurance
 
 **Manual Testing**:
 - Backend: Use API documentation at http://localhost:8000/docs for interactive testing
 - Frontend: Manual browser testing (no automated test framework currently)
-- LangGraph Agents: Test via direct `graph.invoke()` calls or API endpoints
+- Agno Agents: Test via direct `agent.run()` calls or API endpoints
 
 **Integration Testing Scripts** (in `tests/legacy/`):
 - `run_tests.py` - Lightweight integration tests for core API functionality
@@ -529,24 +611,32 @@ See `tests/README.md` for more details on available test scripts and fixtures.
 ## Documentation
 
 Project documentation files:
-- `/doc/需求.md` - Requirements and feature specifications (Chinese)
-- `/doc/工程架构.md` - Engineering architecture overview
-- `/doc/后端详细设计.md` - Backend detailed design
-- `/doc/前端详细设计.md` - Frontend detailed design
-- `/doc/日程表详细设计.md` - Schedule view implementation details
+- **`doc/系统现状总结.md`** ⭐ - **Current implementation status** (most accurate, use this first!)
+- `doc/需求分析.md` - Requirements and feature specifications (Chinese)
+- `doc/框架选型.md` - Framework selection rationale (explains Agno choice)
+- `doc/后端详细设计.md` - Backend detailed design (may reference older LangGraph plans)
+- `doc/前端详细设计.md` - Frontend detailed design
+- `doc/日程表详细设计.md` - Schedule view implementation details
+- `.env.README.md` - Environment configuration guide
 - `README.md` - Project overview and quick start
-- `backend/README.md` - Backend-specific documentation
-- `frontend/README.md` - Frontend-specific documentation
+- `CLAUDE.md` - This file (development guide for Claude Code)
 
-Refer to these documents for detailed specifications when implementing features.
+**Important**: Some older docs may reference LangGraph or future features. Always check `系统现状总结.md` for current implementation status.
 
 ## Quick Reference
 
-**Database location**: `backend/personal_growth_os.db` (SQLite)
-**Vector store**: `backend/chroma_data/` (ChromaDB)
+**Database**: PostgreSQL (cloud-hosted, configured via `DATABASE_URL` in `.env`)
+**Vector extension**: pgvector (installed on PostgreSQL server)
 **API base URL**: `http://localhost:8000`
 **Frontend URL**: `http://localhost:5173`
 **API docs**: `http://localhost:8000/docs`
+
+**Frontend Routes**:
+- `/` or `/dashboard` - Dashboard overview
+- `/tasks` - Task management (Kanban + List + Schedule)
+- `/notes` - Note management (Markdown editor)
+- `/review` - Data review dashboard (planned)
+- `/settings` - LLM configuration (OpenAI/Claude/Ollama)
 
 ## Environment Configuration
 
@@ -564,13 +654,13 @@ This allows Claude Code to execute commands and make file changes without reques
 ## Common Pitfalls to Avoid
 
 1. **DON'T** put SQL queries in API endpoints - use CRUD layer
-2. **DON'T** mutate LangGraph state directly - return partial updates from nodes
-3. **DON'T** skip TypeScript type definitions when adding new features
-4. **DON'T** forget UTF-8 encoding for Chinese characters (FastAPI uses `UTF8JSONResponse` + middleware)
-5. **DO** use `get_chat_model()` factory for consistent LLM access
-6. **DO** define state with TypedDict for LangGraph agents
-7. **DO** refer to backend/app/agents/task_igniter_agent.py:1 for LangGraph patterns
-8. **DO** refer to doc/日程表详细设计.md for schedule view implementation details
+2. **DON'T** skip TypeScript type definitions when adding new features
+3. **DON'T** forget UTF-8 encoding for Chinese characters (FastAPI uses `UTF8JSONResponse` + middleware)
+4. **DON'T** use LangGraph patterns - this project uses Agno
+5. **DO** use Agno for AI agents with declarative configuration
+6. **DO** refer to backend/app/agents/task_igniter_agno.py:1 for Agno patterns
+7. **DO** refer to doc/日程表详细设计.md for schedule view implementation details
+8. **DO** refer to doc/系统现状总结.md for current implementation status
 
 ## Known Implementation Details
 
@@ -602,6 +692,16 @@ The backend uses a custom `UTF8JSONResponse` class and middleware to ensure prop
 - 1 minute = 1 pixel positioning precision
 - Truncation indicators (zigzag + arrow + time label) for events outside 8:00-21:00 viewport
 
-## Technology Migration Note
+## Technology Stack Clarification
 
-**IMPORTANT**: The documentation previously referenced "Agno" as the AI agent framework, but the actual implementation uses **LangGraph**. This CLAUDE.md has been updated to reflect the current LangGraph-based architecture. If migrating to Agno is planned, refer to doc/Agent详细设计.md for migration guidance.
+**IMPORTANT**: This project uses **Agno** for AI agents, NOT LangGraph. Some older documentation may reference LangGraph, but the actual implementation has migrated to Agno for its lighter weight and declarative approach.
+
+**Framework Evolution**:
+- Initial plan: LangGraph (state-driven workflow)
+- Current implementation: **Agno** (declarative agent configuration)
+- Reason: Simpler API, better developer experience, less boilerplate
+
+Refer to:
+- `doc/系统现状总结.md` - Current implementation status
+- `doc/框架选型.md` - Framework selection rationale
+- `backend/app/agents/task_igniter_agno.py` - Reference implementation

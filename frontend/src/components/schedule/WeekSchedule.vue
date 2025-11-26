@@ -17,111 +17,114 @@
       </div>
     </div>
 
-    <!-- Schedule Grid -->
-    <div class="schedule-grid">
-      <!-- Time Column -->
-      <div class="time-column">
-        <!-- Date Header Row -->
-        <div class="time-header">
-          <div class="date-label"></div>
-        </div>
+    <!-- Schedule Container with Fixed Header -->
+    <div class="schedule-container">
+      <!-- Fixed Header Row (日期和全天) -->
+      <div class="schedule-fixed-header">
+        <div class="header-grid">
+          <!-- Time Column Header -->
+          <div class="time-column-header">
+            <div class="time-header">
+              <div class="date-label"></div>
+            </div>
+            <div class="all-day-label-row">
+              <div class="all-day-label">全天</div>
+            </div>
+          </div>
 
-        <!-- All-day Label Row -->
-        <div class="all-day-label-row">
-          <div class="all-day-label">全天</div>
-        </div>
-
-        <!-- Time Slots -->
-        <div
-          v-for="hour in hours"
-          :key="hour"
-          class="time-slot"
-        >
-          {{ formatHour(hour) }}
+          <!-- Day Headers -->
+          <div
+            v-for="day in weekDays"
+            :key="`header-${day.date.toISOString()}`"
+            class="day-column-header"
+            :class="{ 'is-today': isToday(day.date) }"
+          >
+            <div class="day-header">
+              <div class="day-name">{{ day.name }}</div>
+              <div class="day-date" :class="{ 'is-today-date': isToday(day.date) }">
+                {{ formatDayDate(day.date) }}
+              </div>
+            </div>
+            <div class="all-day-events">
+              <AllDayTaskCard
+                v-if="day.allDayTasks.length === 1"
+                :task="day.allDayTasks[0]"
+                @task-click="handleTaskClick"
+              />
+              <AllDayAggregation
+                v-else-if="day.allDayTasks.length > 1"
+                :tasks="day.allDayTasks"
+                @task-click="handleTaskClick"
+              />
+              <div v-else class="all-day-empty"></div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Day Columns -->
-      <div
-        v-for="day in weekDays"
-        :key="day.date.toISOString()"
-        class="day-column"
-        :class="{ 'is-today': isToday(day.date) }"
-      >
-        <!-- Day Header (Date only, 45px) -->
-        <div class="day-header">
-          <div class="day-name">{{ day.name }}</div>
-          <div class="day-date" :class="{ 'is-today-date': isToday(day.date) }">
-            {{ formatDayDate(day.date) }}
+      <!-- Scrollable Time Slots Area -->
+      <div class="schedule-scroll-area">
+        <div class="schedule-grid">
+          <!-- Time Column -->
+          <div class="time-column">
+            <div
+              v-for="hour in hours"
+              :key="hour"
+              class="time-slot"
+            >
+              {{ formatHour(hour) }}
+            </div>
           </div>
-        </div>
 
-        <!-- All-day Events Area (20px height, independent row) -->
-        <div class="all-day-events">
-          <!-- Single all-day task -->
-          <AllDayTaskCard
-            v-if="day.allDayTasks.length === 1"
-            :task="day.allDayTasks[0]"
-            @task-click="handleTaskClick"
-          />
+          <!-- Day Columns (Time Slots Only) -->
+          <div
+            v-for="day in weekDays"
+            :key="day.date.toISOString()"
+            class="day-column"
+            :class="{ 'is-today': isToday(day.date) }"
+          >
+            <div
+              class="day-slots"
+              @click="handleSlotClick(day.date, $event)"
+            >
+              <!-- Hour Grid Lines (background) -->
+              <div
+                v-for="hour in hours"
+                :key="`grid-${hour}`"
+                class="hour-grid-line"
+                :style="{ top: `${(hour - 8) * 60}px` }"
+              ></div>
 
-          <!-- Multiple all-day tasks (aggregation) -->
-          <AllDayAggregation
-            v-else-if="day.allDayTasks.length > 1"
-            :tasks="day.allDayTasks"
-            @task-click="handleTaskClick"
-          />
+              <!-- Half-Hour Grid Lines (lighter, between full hours) -->
+              <div
+                v-for="hour in hours.slice(0, -1)"
+                :key="`half-grid-${hour}`"
+                class="half-hour-grid-line"
+                :style="{ top: `${(hour - 8) * 60 + 30}px` }"
+              ></div>
 
-          <!-- No all-day tasks (placeholder) -->
-          <div v-else class="all-day-empty">
-
+              <!-- Render Items (TaskCard or AggregationBlock) -->
+              <template v-for="item in day.renderItems" :key="item.id">
+                <TaskCard
+                  v-if="item.type === 'task'"
+                  :task="item.task"
+                  :top="item.top"
+                  :height="item.height"
+                  :render-start-time="item.renderStartTime"
+                  :render-end-time="item.renderEndTime"
+                  @task-click="handleTaskClick"
+                />
+                <AggregationBlock
+                  v-else-if="item.type === 'aggregation'"
+                  :tasks="item.tasks"
+                  :display-task="item.displayTask"
+                  :top="item.top"
+                  :height="item.height"
+                  @task-click="handleTaskClick"
+                />
+              </template>
+            </div>
           </div>
-        </div>
-
-        <!-- Time Slots Container (780px = 13 hours × 60px) -->
-        <div
-          class="day-slots"
-          @click="handleSlotClick(day.date, $event)"
-        >
-          <!-- Hour Grid Lines (background) -->
-          <div
-            v-for="hour in hours"
-            :key="`grid-${hour}`"
-            class="hour-grid-line"
-            :style="{ top: `${(hour - 8) * 60}px` }"
-          ></div>
-
-          <!-- Half-Hour Grid Lines (lighter, between full hours) -->
-          <div
-            v-for="hour in hours.slice(0, -1)"
-            :key="`half-grid-${hour}`"
-            class="half-hour-grid-line"
-            :style="{ top: `${(hour - 8) * 60 + 30}px` }"
-          ></div>
-
-          <!-- Render Items (TaskCard or AggregationBlock) -->
-          <template v-for="item in day.renderItems" :key="item.id">
-            <!-- Independent Task: Use TaskCard -->
-            <TaskCard
-              v-if="item.type === 'task'"
-              :task="item.task"
-              :top="item.top"
-              :height="item.height"
-              :render-start-time="item.renderStartTime"
-              :render-end-time="item.renderEndTime"
-              @task-click="handleTaskClick"
-            />
-
-            <!-- Overlapping Tasks: Use AggregationBlock -->
-            <AggregationBlock
-              v-else-if="item.type === 'aggregation'"
-              :tasks="item.tasks"
-              :display-task="item.displayTask"
-              :top="item.top"
-              :height="item.height"
-              @task-click="handleTaskClick"
-            />
-          </template>
         </div>
       </div>
     </div>
@@ -546,12 +549,9 @@ $color-aggregation: #e5e7eb;
 }
 
 // ============================================
-// Schedule Grid
+// Schedule Container (包含固定头部和滚动区域)
 // ============================================
-.schedule-grid {
-  display: grid;
-  grid-template-columns: 60px repeat(7, 1fr);
-  gap: 0;
+.schedule-container {
   border: 1px solid $color-border;
   border-radius: $radius-md;
   overflow: hidden;
@@ -559,38 +559,163 @@ $color-aggregation: #e5e7eb;
 }
 
 // ============================================
-// Time Column
+// Fixed Header (日期和全天行)
+// ============================================
+.schedule-fixed-header {
+  background-color: white;
+  border-bottom: 2px solid $color-border;
+
+  .header-grid {
+    display: grid;
+    grid-template-columns: 60px repeat(7, 1fr);
+    gap: 0;
+  }
+
+  .time-column-header {
+    border-right: 1px solid $color-border;
+    background-color: $bg-color-hover;
+
+    .time-header {
+      height: 45px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-bottom: 1px solid $color-border;
+
+      .date-label {
+        font-size: 10px;
+        color: $color-text-secondary;
+      }
+    }
+
+    .all-day-label-row {
+      height: 25px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      .all-day-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: $color-text-secondary;
+      }
+    }
+  }
+
+  .day-column-header {
+    border-right: 1px solid $color-border;
+
+    &:last-child {
+      border-right: none;
+    }
+
+    &.is-today {
+      background-color: rgba($color-primary, 0.02);
+
+      .day-header {
+        background-color: rgba($color-primary, 0.05);
+      }
+
+      .all-day-events {
+        background-color: rgba($color-primary, 0.03);
+      }
+    }
+
+    .day-header {
+      height: 45px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      border-bottom: 1px solid $color-border;
+      background-color: $bg-color-hover;
+
+      .day-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: $color-text-primary;
+      }
+
+      .day-date {
+        font-size: 12px;
+        font-weight: 400;
+        color: $color-text-secondary;
+
+        &.is-today-date {
+          color: white;
+          background-color: $color-primary;
+          padding: 2px 8px;
+          border-radius: $radius-sm;
+          font-weight: 500;
+        }
+      }
+    }
+
+    .all-day-events {
+      min-height: 25px;
+      max-height: 25px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: $spacing-xs;
+      overflow-y: auto;
+      overflow-x: hidden;
+      background-color: $bg-color-hover;
+
+      .all-day-empty {
+        font-size: 10px;
+        color: transparent;
+        width: 100%;
+      }
+    }
+  }
+}
+
+// ============================================
+// Scrollable Area (时间槽)
+// ============================================
+.schedule-scroll-area {
+  // 不设置固定max-height，让日程表完整显示所有时间槽
+  // 如果需要在特定容器中限制高度，由父组件通过CSS控制
+  overflow-y: visible;
+  overflow-x: hidden;
+
+  // 自定义滚动条（当父容器限制高度时生效）
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: $bg-color-hover;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: $color-border;
+    border-radius: 4px;
+
+    &:hover {
+      background: $color-text-tertiary;
+    }
+  }
+}
+
+// ============================================
+// Schedule Grid (时间槽网格)
+// ============================================
+.schedule-grid {
+  display: grid;
+  grid-template-columns: 60px repeat(7, 1fr);
+  gap: 0;
+  background-color: white;
+}
+
+// ============================================
+// Time Column (时间列)
 // ============================================
 .time-column {
   border-right: 1px solid $color-border;
   background-color: $bg-color-hover;
-
-  .time-header {
-    height: 45px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-bottom: 1px solid $color-border;
-
-    .date-label {
-      font-size: 10px;
-      color: $color-text-secondary;
-    }
-  }
-
-  .all-day-label-row {
-    height: 25px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-bottom: 1px solid $color-border;
-
-    .all-day-label {
-      font-size: 10px;
-      font-weight: 600;
-      color: $color-text-secondary;
-    }
-  }
 
   .time-slot {
     height: 60px;
@@ -600,11 +725,15 @@ $color-aggregation: #e5e7eb;
     font-size: 12px;
     color: $color-text-tertiary;
     border-top: 1px solid $color-border;
+
+    &:first-child {
+      border-top: none;
+    }
   }
 }
 
 // ============================================
-// Day Column
+// Day Column (滚动区域内的日列 - 只包含时间槽)
 // ============================================
 .day-column {
   border-right: 1px solid $color-border;
@@ -616,64 +745,6 @@ $color-aggregation: #e5e7eb;
 
   &.is-today {
     background-color: rgba($color-primary, 0.02);
-
-    .day-header {
-      background-color: rgba($color-primary, 0.05);
-    }
-
-    .all-day-events {
-      background-color: rgba($color-primary, 0.03);
-    }
-  }
-
-  .day-header {
-    height: 45px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    border-bottom: 1px solid $color-border;
-    background-color: $bg-color-hover;
-
-    .day-name {
-      font-size: 14px;
-      font-weight: 600;
-      color: $color-text-primary;
-    }
-
-    .day-date {
-      font-size: 12px;
-      font-weight: 400;
-      color: $color-text-secondary;
-
-      &.is-today-date {
-        color: white;
-        background-color: $color-primary;
-        padding: 2px 8px;
-        border-radius: $radius-sm;
-        font-weight: 500;
-      }
-    }
-  }
-
-  .all-day-events {
-    min-height: 25px;
-    max-height: 25px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: $spacing-xs;
-    border-bottom: 1px solid $color-border;
-    overflow-y: auto;
-    overflow-x: hidden;
-    background-color: $bg-color-hover;
-
-    .all-day-empty {
-      font-size: 10px;
-      color: transparent;
-      width: 100%;
-    }
   }
 
   .day-slots {

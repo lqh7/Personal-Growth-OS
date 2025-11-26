@@ -102,18 +102,21 @@ const coverStyle = computed(() => {
     }
   }
 
-  // Default gradient based on note ID for variety
+  // 中国传统色系渐变 - 宋瓷雅韵
   const gradients = [
-    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-    'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-    'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-    'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-    'linear-gradient(135deg, #30cfd0 0%, #330867 100%)'
+    'linear-gradient(135deg, rgba(168, 197, 186, 0.25) 0%, rgba(136, 179, 168, 0.35) 100%)', // 天青渐变
+    'linear-gradient(135deg, rgba(212, 165, 165, 0.25) 0%, rgba(193, 138, 122, 0.35) 100%)', // 藕荷渐变
+    'linear-gradient(135deg, rgba(158, 179, 191, 0.25) 0%, rgba(127, 168, 157, 0.35) 100%)', // 烟雨蓝渐变
+    'linear-gradient(135deg, rgba(217, 167, 106, 0.25) 0%, rgba(196, 149, 88, 0.35) 100%)',  // 琥珀黄渐变
+    'linear-gradient(135deg, rgba(184, 212, 201, 0.25) 0%, rgba(157, 197, 184, 0.35) 100%)', // 浅粉青渐变
+    'linear-gradient(135deg, rgba(127, 168, 157, 0.25) 0%, rgba(106, 150, 136, 0.35) 100%)'  // 梅子青渐变
   ]
 
   const gradientIndex = props.note.id % gradients.length
-  return { background: gradients[gradientIndex] }
+  return {
+    background: gradients[gradientIndex],
+    backdropFilter: 'blur(10px)'
+  }
 })
 
 // Format relative time
@@ -141,146 +144,203 @@ function formatTime(dateString: string): string {
 <style scoped lang="scss">
 @import '@/assets/styles/variables.scss';
 @import '@/assets/styles/mixins.scss';
+@import '@/assets/styles/animations.scss';
 
 .note-card-notion {
-  border: 1px solid transparent;
-  border-radius: $radius-lg;
-  background: white;
+  @include card-base;
+  @include hover-gloss;
+  position: relative;
   overflow: hidden;
-  transition: all $transition-base ease;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: fadeInScale 0.6s cubic-bezier(0.4, 0, 0.2, 1) both;
 
   &:hover {
-    border-color: $color-border;
-    background-color: #fafafa;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: $shadow-lg;
+    border-color: rgba(136, 179, 168, 0.4);
   }
 
   &.is-pinned {
-    border-color: rgba($color-primary, 0.3);
-    background: linear-gradient(135deg, #f5f7fa 0%, #f0f2ff 100%);
+    border-left: 4px solid $color-primary;
+    background: linear-gradient(145deg,
+      rgba(253, 252, 248, 1) 0%,
+      rgba(245, 243, 237, 0.98) 100%);
+    box-shadow: 0 4px 16px rgba(136, 179, 168, 0.15);
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg,
+        rgba(136, 179, 168, 0.05) 0%,
+        transparent 100%);
+      pointer-events: none;
+    }
   }
 }
 
 .card-cover {
-  height: 120px;
+  height: 140px;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
+  border-radius: $radius-lg $radius-lg 0 0;
+  overflow: hidden;
+
+  // 水墨纹理叠加
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 30% 40%, rgba(255, 255, 255, 0.15) 0%, transparent 50%),
+      radial-gradient(circle at 70% 60%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+    pointer-events: none;
+  }
 
   .card-emoji {
-    font-size: 48px;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+    font-size: 56px;
+    filter: drop-shadow(0 4px 8px rgba(58, 58, 58, 0.15));
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1;
   }
 }
 
+// 悬停时emoji微动
+.note-card-notion:hover .card-cover .card-emoji {
+  transform: scale(1.1) rotate(5deg);
+}
+
 .card-body {
-  padding: $spacing-lg;
+  padding: $spacing-xl;
+  background: linear-gradient(180deg,
+    rgba(253, 252, 248, 1) 0%,
+    rgba(253, 252, 248, 0.98) 100%);
 }
 
 .card-title {
-  font-size: $font-size-lg;
-  font-weight: 600;
+  font-size: $font-size-lg + 2px;
+  font-weight: $font-weight-semibold;
   color: $color-text-primary;
-  margin: 0 0 $spacing-md 0;
+  margin: 0 0 $spacing-lg 0;
   display: flex;
   align-items: center;
   gap: $spacing-sm;
-  line-height: 1.4;
+  line-height: 1.5;
+  letter-spacing: 0.3px;
 
   .title-text {
     flex: 1;
     @include text-ellipsis;
+    transition: color 0.2s;
   }
 
   .pin-icon,
   .favorite-icon {
-    font-size: $font-size-md;
+    font-size: $font-size-lg;
     flex-shrink: 0;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .pin-icon {
-    color: $color-primary;
+    filter: drop-shadow(0 1px 2px rgba(136, 179, 168, 0.3));
   }
 
   .favorite-icon {
-    color: #f59e0b;
+    filter: drop-shadow(0 1px 2px rgba(217, 167, 106, 0.3));
+  }
+
+  &:hover .title-text {
+    color: $color-primary-dark;
+  }
+
+  &:hover .pin-icon,
+  &:hover .favorite-icon {
+    transform: scale(1.2);
   }
 }
 
 .card-preview {
-  font-size: $font-size-sm;
-  color: $color-text-secondary;
-  line-height: 1.6;
-  margin: 0 0 $spacing-lg 0;
+  font-size: $font-size-md;
+  color: $color-text-regular;
+  line-height: 1.8;
+  margin: 0 0 $spacing-xl 0;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  min-height: 4.8em; // 3 lines minimum
+  min-height: 5.4em; // 3 lines * 1.8 line-height
+  letter-spacing: 0.3px;
 }
 
 .card-footer {
   display: flex;
   align-items: center;
-  gap: $spacing-sm;
+  gap: $spacing-md;
   flex-wrap: wrap;
-  font-size: $font-size-xs;
-  color: $color-text-tertiary;
+  padding-top: $spacing-md;
+  border-top: 1px solid rgba(217, 212, 201, 0.2);
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+
+  // 覆盖Element Plus标签样式
+  :deep(.el-tag) {
+    border-radius: $radius-round;
+    padding: 4px 12px;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-medium;
+    letter-spacing: 0.3px;
+    border: 1.5px solid currentColor;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &:hover {
+      transform: scale(1.05);
+      box-shadow: 0 2px 8px rgba(136, 179, 168, 0.2);
+    }
+  }
 
   .more-tags {
     font-size: $font-size-xs;
     color: $color-text-tertiary;
+    padding: 4px 8px;
+    background: rgba(136, 179, 168, 0.08);
+    border-radius: $radius-round;
+    font-weight: $font-weight-medium;
   }
 
   .footer-right {
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: $spacing-md;
+    gap: $spacing-lg;
   }
 
   .view-count {
     display: flex;
     align-items: center;
-    gap: 4px;
-    color: $color-text-tertiary;
+    gap: 6px;
+    color: $color-text-secondary;
+    font-size: $font-size-sm;
+    transition: color 0.2s;
+
+    &:hover {
+      color: $color-primary;
+    }
+
+    .el-icon {
+      font-size: $font-size-md;
+    }
   }
 
   .update-time {
-    color: $color-text-tertiary;
-  }
-}
-
-// Dark mode support (optional)
-@media (prefers-color-scheme: dark) {
-  .note-card-notion {
-    background: #1e1e1e;
-    border-color: #333;
-
-    &:hover {
-      background-color: #252525;
-      border-color: #444;
-    }
-
-    &.is-pinned {
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    }
-  }
-
-  .card-title {
-    color: #e0e0e0;
-  }
-
-  .card-preview {
-    color: #b0b0b0;
-  }
-
-  .card-footer {
-    color: #888;
+    color: $color-text-secondary;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-normal;
   }
 }
 </style>

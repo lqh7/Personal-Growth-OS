@@ -19,106 +19,52 @@
 
     <!-- 导航菜单 -->
     <nav class="nav-menu">
-      <router-link
-        v-for="item in navItems"
-        :key="item.path"
-        :to="item.path"
-        class="nav-item"
-        :class="{ active: isActive(item.path) }"
-      >
-        <el-icon class="nav-icon" :size="20">
-          <component :is="item.icon" />
-        </el-icon>
-        <transition name="fade">
-          <span v-show="!uiStore.sidebarCollapsed" class="nav-label">{{ item.label }}</span>
-        </transition>
-      </router-link>
-    </nav>
-
-    <!-- 对话历史 - 直接在导航下方 -->
-    <div class="conversation-section">
-      <div v-show="!uiStore.sidebarCollapsed" class="section-header">
-        <el-icon :size="16"><ChatLineRound /></el-icon>
-        <span>对话记录</span>
-      </div>
-
-      <div class="conversation-list">
+      <template v-for="item in navItems" :key="item.path">
+        <!-- Action item (不是路由链接) -->
         <div
-          v-for="conv in chatStore.conversations"
-          :key="conv.id"
-          class="conversation-item"
-          :class="{ active: conv.isActive }"
-          @click="chatStore.switchConversation(conv.id)"
-          @contextmenu.prevent="handleContextMenu($event, conv)"
+          v-if="item.isAction"
+          class="nav-item action-item"
+          @click="item.onClick"
         >
-          <el-icon class="conv-icon" :size="18">
-            <ChatDotRound />
+          <el-icon class="nav-icon" :size="20">
+            <component :is="item.icon" />
           </el-icon>
           <transition name="fade">
-            <div v-show="!uiStore.sidebarCollapsed" class="conv-content">
-              <div
-                v-if="editingConvId === conv.id"
-                class="conv-title-edit"
-                @click.stop
-              >
-                <el-input
-                  v-model="editingTitle"
-                  size="small"
-                  @blur="saveTitle(conv.id)"
-                  @keyup.enter="saveTitle(conv.id)"
-                  @keyup.esc="cancelEdit"
-                  ref="titleInputRef"
-                />
-              </div>
-              <div
-                v-else
-                class="conv-title"
-                @dblclick.stop="startEdit(conv)"
-              >
-                {{ conv.title }}
-              </div>
-              <div class="conv-time">{{ formatTime(conv.timestamp) }}</div>
-            </div>
-          </transition>
-
-          <!-- 删除按钮 - hover时显示 -->
-          <transition name="fade">
-            <el-icon
-              v-show="!uiStore.sidebarCollapsed"
-              class="delete-icon"
-              :size="16"
-              @click.stop="handleDelete(conv.id)"
-            >
-              <Delete />
-            </el-icon>
+            <span v-show="!uiStore.sidebarCollapsed" class="nav-label">{{ item.label }}</span>
           </transition>
         </div>
-      </div>
+
+        <!-- Router link item -->
+        <router-link
+          v-else
+          :to="item.path"
+          class="nav-item"
+          :class="{ active: isActive(item.path) }"
+        >
+          <el-icon class="nav-icon" :size="20">
+            <component :is="item.icon" />
+          </el-icon>
+          <transition name="fade">
+            <span v-show="!uiStore.sidebarCollapsed" class="nav-label">{{ item.label }}</span>
+          </transition>
+        </router-link>
+      </template>
+    </nav>
+
+    <!-- 对话历史 - 使用新的SessionList组件 -->
+    <div v-show="!uiStore.sidebarCollapsed" class="session-section">
+      <SessionList />
     </div>
 
-    <!-- 新建对话按钮 - 固定在底部 -->
-    <div class="sidebar-footer">
-      <el-button
-        v-show="!uiStore.sidebarCollapsed"
-        class="new-conversation-btn"
-        type="primary"
-        @click="chatStore.createConversation"
-      >
-        <el-icon><Plus /></el-icon>
-        <span>新建对话</span>
-      </el-button>
-
-      <!-- 折叠按钮（已折叠时显示图标按钮） -->
-      <el-button
-        v-show="uiStore.sidebarCollapsed"
-        class="collapsed-new-btn"
-        type="primary"
-        circle
-        @click="chatStore.createConversation"
-      >
-        <el-icon><Plus /></el-icon>
-      </el-button>
-    </div>
+    <!-- 设置按钮 (底部固定) -->
+    <router-link to="/settings" class="settings-btn" :class="{ active: isActive('/settings') }">
+      <el-icon class="settings-icon" :size="20">
+        <Setting />
+      </el-icon>
+      <transition name="fade">
+        <span v-show="!uiStore.sidebarCollapsed" class="settings-label">设置</span>
+      </transition>
+    </router-link>
 
     <!-- 折叠按钮 -->
     <div class="collapse-btn" @click="uiStore.toggleSidebar">
@@ -133,23 +79,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, nextTick } from 'vue'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUiStore } from '@/stores/uiStore'
-import { useChatStore, type Conversation } from '@/stores/chatStore'
+import { useChatStore } from '@/stores/chatStore'
 import {
   HomeFilled,
   List,
   Document,
   DataAnalysis,
   ChatLineRound,
-  ChatDotRound,
-  Plus,
   DArrowLeft,
   DArrowRight,
-  Delete
+  Setting
 } from '@element-plus/icons-vue'
-import { ElMessageBox } from 'element-plus'
+import SessionList from '@/components/chat/SessionList.vue'
 
 // ============================================
 // Stores
@@ -168,11 +112,6 @@ const navItems = [
   { path: '/review', label: '复盘', icon: DataAnalysis }
 ]
 
-// 标题编辑相关
-const editingConvId = ref<string | null>(null)
-const editingTitle = ref('')
-const titleInputRef = ref<any>(null)
-
 // ============================================
 // Computed
 // ============================================
@@ -185,21 +124,6 @@ const sidebarWidthPx = computed(() => {
 // ============================================
 function isActive(path: string) {
   return route.path === path
-}
-
-function formatTime(date: Date) {
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
-
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟前`
-  if (hours < 24) return `${hours}小时前`
-  if (days === 1) return '昨天'
-  if (days < 7) return `${days}天前`
-  return date.toLocaleDateString()
 }
 
 function startResize(e: MouseEvent) {
@@ -221,48 +145,6 @@ function startResize(e: MouseEvent) {
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
 }
-
-// 标题编辑功能
-function startEdit(conv: Conversation) {
-  editingConvId.value = conv.id
-  editingTitle.value = conv.title
-  nextTick(() => {
-    titleInputRef.value?.focus()
-  })
-}
-
-function saveTitle(convId: string) {
-  if (editingTitle.value.trim()) {
-    chatStore.updateConversationTitle(convId, editingTitle.value.trim())
-  }
-  editingConvId.value = null
-  editingTitle.value = ''
-}
-
-function cancelEdit() {
-  editingConvId.value = null
-  editingTitle.value = ''
-}
-
-function handleContextMenu(e: MouseEvent, conv: Conversation) {
-  // 简化版：直接触发编辑
-  startEdit(conv)
-}
-
-// 删除对话
-function handleDelete(convId: string) {
-  ElMessageBox.confirm('确定要删除这个对话吗？', '确认删除', {
-    confirmButtonText: '删除',
-    cancelButtonText: '取消',
-    type: 'warning'
-  })
-    .then(() => {
-      chatStore.deleteConversation(convId)
-    })
-    .catch(() => {
-      // 取消删除
-    })
-}
 </script>
 
 <style scoped lang="scss">
@@ -272,12 +154,31 @@ function handleDelete(convId: string) {
 .sidebar {
   position: relative;
   height: 100vh;
-  background-color: $bg-color-card;
+  background: linear-gradient(180deg,
+    rgba(253, 252, 248, 0.95) 0%,
+    rgba(249, 247, 241, 0.98) 100%);
+  backdrop-filter: blur(20px);
   border-right: 1px solid $color-border;
+  box-shadow: $shadow-ink;
   display: flex;
   flex-direction: column;
   transition: width $transition-base;
   overflow: hidden;
+
+  // 水墨边框装饰
+  &::before {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background: linear-gradient(180deg,
+      rgba(136, 179, 168, 0.15) 0%,
+      rgba(136, 179, 168, 0.25) 50%,
+      rgba(136, 179, 168, 0.15) 100%);
+    pointer-events: none;
+  }
 
   // 折叠状态
   &.collapsed {
@@ -289,11 +190,6 @@ function handleDelete(convId: string) {
       justify-content: center;
       padding: $spacing-md;
     }
-
-    .conversation-item {
-      justify-content: center;
-      padding: $spacing-sm;
-    }
   }
 }
 
@@ -302,6 +198,21 @@ function handleDelete(convId: string) {
   padding: $spacing-lg;
   border-bottom: 1px solid $color-border;
   flex-shrink: 0;
+  position: relative;
+
+  // 水墨晕染装饰
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 10%;
+    width: 80%;
+    height: 2px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(136, 179, 168, 0.3) 50%,
+      transparent 100%);
+  }
 
   .logo-container {
     display: flex;
@@ -310,19 +221,32 @@ function handleDelete(convId: string) {
 
     .logo-icon {
       color: $color-primary;
+      filter: drop-shadow(0 2px 4px rgba(136, 179, 168, 0.2));
+      transition: transform $transition-base;
+
+      &:hover {
+        transform: rotate(360deg) scale(1.1);
+      }
     }
 
     .logo-text {
       .brand-name {
-        font-size: $font-size-md;
+        font-family: $font-family-heading;
+        font-size: $font-size-lg;
         font-weight: 600;
-        color: $color-primary;
+        background: $color-primary-gradient;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        letter-spacing: 1px;
       }
 
       .brand-subtitle {
         font-size: $font-size-xs;
         color: $color-text-secondary;
         margin-top: 2px;
+        letter-spacing: 2px;
+        font-weight: 300;
       }
     }
   }
@@ -334,142 +258,126 @@ function handleDelete(convId: string) {
   flex-shrink: 0;
 
   .nav-item {
+    position: relative;
     display: flex;
     align-items: center;
     gap: $spacing-md;
     padding: $spacing-md $spacing-lg;
     margin-bottom: $spacing-sm;
-    border-radius: $radius-md;
+    border-radius: $radius-lg;
     color: $color-text-regular;
     text-decoration: none;
-    transition: all $transition-fast;
+    transition: all $transition-base cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
+    overflow: hidden;
+
+    // 水墨晕染效果（悬停时）
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at center,
+        rgba(136, 179, 168, 0.15) 0%,
+        transparent 70%);
+      opacity: 0;
+      transform: scale(0.5);
+      transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+    }
 
     .nav-icon {
       flex-shrink: 0;
+      transition: transform $transition-base cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .nav-label {
       font-size: $font-size-sm;
+      font-weight: 500;
+      letter-spacing: 0.3px;
     }
 
     &:hover {
-      background-color: rgba($color-primary, 0.1);
-      color: $color-primary;
+      background-color: rgba($color-primary, 0.08);
+      color: $color-primary-dark;
+      transform: translateX(4px);
+      box-shadow: 0 2px 8px rgba(136, 179, 168, 0.12);
+
+      &::before {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      .nav-icon {
+        transform: scale(1.1);
+      }
     }
 
     &.active {
-      background-color: $color-primary;
+      background: $color-primary-gradient;
       color: white;
+      font-weight: 600;
+      box-shadow: $shadow-md;
+
+      &::before {
+        display: none;
+      }
+
+      .nav-icon {
+        transform: scale(1.05);
+      }
     }
   }
 }
 
-// 对话历史区域 - 可滚动
-.conversation-section {
+// 会话历史区域 - 使用SessionList组件
+.session-section {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: $spacing-md;
-  border-top: 1px solid $color-border;
+  overflow: hidden;
+}
 
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: $spacing-sm;
-    padding: $spacing-sm $spacing-md;
-    font-size: $font-size-xs;
-    color: $color-text-secondary;
-    margin-bottom: $spacing-sm;
+// 设置按钮 (底部固定)
+.settings-btn {
+  display: flex;
+  align-items: center;
+  gap: $spacing-md;
+  padding: $spacing-md $spacing-lg;
+  margin: 0 $spacing-md $spacing-md $spacing-md;
+  border-radius: $radius-md;
+  color: $color-text-regular;
+  text-decoration: none;
+  transition: all $transition-fast;
+  cursor: pointer;
+  flex-shrink: 0;
+
+  .settings-icon {
     flex-shrink: 0;
   }
 
-  .conversation-list {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    @include custom-scrollbar;
+  .settings-label {
+    font-size: $font-size-sm;
+  }
 
-    .conversation-item {
-      display: flex;
-      align-items: center;
-      gap: $spacing-sm;
-      padding: $spacing-md;
-      margin-bottom: $spacing-sm;
-      border-radius: $radius-md;
-      cursor: pointer;
-      transition: all $transition-fast;
-      position: relative;
+  &:hover {
+    background-color: rgba($color-primary, 0.1);
+    color: $color-primary;
+  }
 
-      .conv-icon {
-        flex-shrink: 0;
-        color: $color-primary;
-      }
-
-      .conv-content {
-        flex: 1;
-        min-width: 0;
-
-        .conv-title {
-          font-size: $font-size-sm;
-          color: $color-text-primary;
-          @include text-ellipsis;
-        }
-
-        .conv-time {
-          font-size: $font-size-xs;
-          color: $color-text-secondary;
-          margin-top: 2px;
-        }
-      }
-
-      .delete-icon {
-        flex-shrink: 0;
-        color: $color-text-tertiary;
-        opacity: 0;
-        transition: all $transition-fast;
-        cursor: pointer;
-
-        &:hover {
-          color: $color-danger;
-        }
-      }
-
-      &:hover {
-        background-color: rgba($color-primary, 0.05);
-
-        .delete-icon {
-          opacity: 1;
-        }
-      }
-
-      &.active {
-        background-color: rgba($color-primary, 0.1);
-        border-left: 3px solid $color-primary;
-      }
-    }
+  &.active {
+    background-color: $color-primary;
+    color: white;
   }
 }
 
-// 底部固定区域 - 新建对话按钮
-.sidebar-footer {
+// 侧边栏折叠时设置按钮居中
+.sidebar.collapsed .settings-btn {
+  justify-content: center;
   padding: $spacing-md;
-  border-top: 1px solid $color-border;
-  background-color: $bg-color-card;
-  flex-shrink: 0;
-
-  .new-conversation-btn {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: $spacing-sm;
-  }
-
-  .collapsed-new-btn {
-    width: 100%;
-  }
 }
 
 // 折叠按钮

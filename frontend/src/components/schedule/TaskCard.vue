@@ -8,7 +8,7 @@
   >
     <template #reference>
       <div
-        class="task-card"
+        class="schedule-task-card"
         :class="[{ 'truncated-top': isTruncatedTop, 'truncated-bottom': isTruncatedBottom, 'small-card': isSmallCard }]"
         :style="cardStyle"
         @click="$emit('task-click', task)"
@@ -91,13 +91,26 @@ const emit = defineEmits<{
 // Computed
 // ============================================
 
-const taskBackgroundColor = computed(() => {
-  return props.task.project?.color || '#667eea' // 默认紫色
-})
+// Helper function: Convert hex color to rgba with opacity
+function hexToRgba(hex: string, opacity: number): string {
+  // Remove # if present
+  hex = hex.replace('#', '')
 
-const taskOpacity = computed(() => {
-  const priority = props.task.priority
-  return 0.25 + (priority * 0.15)
+  // Parse hex to RGB
+  const r = parseInt(hex.substring(0, 2), 16)
+  const g = parseInt(hex.substring(2, 4), 16)
+  const b = parseInt(hex.substring(4, 6), 16)
+
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`
+}
+
+const taskBackgroundColor = computed(() => {
+  const hexColor = props.task.project?.color || '#667eea' // 默认紫色
+  // 项目颜色 + 优先级透明度
+  // 公式: 0.5 + (priority × 0.1)，范围 0.5-1.0
+  // 优先级0=50%, 优先级5=100%
+  const opacity = Math.min(1.0, 0.5 + (props.task.priority * 0.1))
+  return hexToRgba(hexColor, opacity)
 })
 
 const isTruncatedTop = computed(() => {
@@ -128,8 +141,7 @@ const cardStyle = computed(() => {
   return {
     top: `${props.top}px`,
     height: `${props.height}px`,
-    backgroundColor: taskBackgroundColor.value,
-    opacity: taskOpacity.value
+    backgroundColor: taskBackgroundColor.value // Already contains opacity in rgba format
   }
 })
 
@@ -182,7 +194,8 @@ $transition-fast: 0.15s ease;
 $font-size-xs: 12px;
 $font-size-sm: 14px;
 
-.task-card {
+// 使用独立的类名，避免与全局 .task-card 样式冲突
+.schedule-task-card {
   position: absolute;
   left: 4px;
   right: 4px;
@@ -194,15 +207,27 @@ $font-size-sm: 14px;
   overflow: hidden;
   z-index: 1;
 
+  // 强制使用实色背景，增强对比度
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+
+  // 强制禁用任何伪元素覆盖
+  &::before,
+  &::after {
+    content: none !important;
+    display: none !important;
+  }
+
   // Vertically center content
   display: flex;
   flex-direction: column;
   justify-content: center;
 
   &:hover {
-    box-shadow: $shadow-md;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
     transform: translateY(-1px);
     z-index: 2;
+    filter: brightness(1.1);
   }
 
   // Small card: no padding for height < 10px
@@ -211,51 +236,17 @@ $font-size-sm: 14px;
     justify-content: center;
   }
 
-  // Truncation effects
+  // Truncation effects - 使用内联样式替代伪元素
   &.truncated-top {
     border-top-left-radius: 0;
     border-top-right-radius: 0;
-
-    // Zigzag top edge
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 4px;
-      background:
-        linear-gradient(135deg, transparent 25%, currentColor 25%) -5px 0,
-        linear-gradient(225deg, transparent 25%, currentColor 25%) 5px 0,
-        linear-gradient(315deg, transparent 25%, currentColor 25%) 5px 0,
-        linear-gradient(45deg, transparent 25%, currentColor 25%) -5px 0;
-      background-size: 10px 4px;
-      background-repeat: repeat-x;
-      opacity: 0.8;
-    }
+    border-top: 2px dashed rgba(255, 255, 255, 0.5);
   }
 
   &.truncated-bottom {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
-
-    // Zigzag bottom edge
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 4px;
-      background:
-        linear-gradient(135deg, currentColor 25%, transparent 25%) -5px 0,
-        linear-gradient(225deg, currentColor 25%, transparent 25%) 5px 0,
-        linear-gradient(315deg, currentColor 25%, transparent 25%) 5px 0,
-        linear-gradient(45deg, currentColor 25%, transparent 25%) -5px 0;
-      background-size: 10px 4px;
-      background-repeat: repeat-x;
-      opacity: 0.8;
-    }
+    border-bottom: 2px dashed rgba(255, 255, 255, 0.5);
   }
 
   .task-content {

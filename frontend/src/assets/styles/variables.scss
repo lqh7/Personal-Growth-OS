@@ -1,28 +1,35 @@
 // ============================================
-// 色彩系统 (Color System)
+// 色彩系统 (Color System) - 中国传统色 · 宋瓷雅韵
 // ============================================
 
-// 主题色 - 蓝色系
-$color-primary: #667eea;
-$color-primary-light: #a8b5f5;
-$color-primary-dark: #5568d3;
-$color-primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+// 主题色 - 青瓷系（天青、粉青、梅子青）
+$color-primary: #88b3a8; // 粉青 - 龙泉青瓷的柔和青绿
+$color-primary-light: #b8d4c9; // 浅粉青
+$color-primary-dark: #6a9688; // 深粉青
+$color-primary-gradient: linear-gradient(135deg, #88b3a8 0%, #7fa89d 50%, #9dc5b8 100%);
 
-// 功能色
-$color-success: #67c23a;
-$color-warning: #e6a23c;
-$color-danger: #f56c6c;
-$color-info: #909399;
+// 辅助色 - 宋瓷釉色系
+$color-celadon: #a8c5ba; // 天青色
+$color-moon-white: #e8e4d9; // 月白
+$color-plum-green: #7fa89d; // 梅子青
+$color-lotus: #d4a5a5; // 藕荷
+$color-misty-blue: #9eb3bf; // 烟雨蓝
 
-// 中性色
-$color-text-primary: #303133;
-$color-text-regular: #606266;
-$color-text-secondary: #909399;
-$color-text-tertiary: #c0c4cc;
-$color-border: #dcdfe6;
-$bg-color-page: #f5f7fa;
-$bg-color-card: #ffffff;
-$bg-color-hover: #f5f7fa;
+// 功能色 - 自然柔和系
+$color-success: #7fa89d; // 青翠绿（梅子青）
+$color-warning: #d9a76a; // 琥珀黄（宋代陶瓷釉）
+$color-danger: #c18a7a; // 胭脂红（柔和朱砂）
+$color-info: #9eb3bf; // 烟雨蓝
+
+// 中性色 - 水墨晕染系
+$color-text-primary: #3a3a3a; // 浓墨
+$color-text-regular: #5a5a5a; // 中墨
+$color-text-secondary: #8a8a8a; // 淡墨
+$color-text-tertiary: #b8b8b8; // 轻墨
+$color-border: #d9d4c9; // 宣纸边
+$bg-color-page: #f5f3ed; // 宣纸白（米白底）
+$bg-color-card: #fdfcf8; // 瓷器白（温润白）
+$bg-color-hover: #efeee8; // 水墨晕染
 
 // ============================================
 // 圆角系统 (Border Radius)
@@ -44,24 +51,41 @@ $spacing-xl: 32px;
 $spacing-xxl: 48px;
 
 // ============================================
-// 字体系统 (Typography)
+// 字体系统 (Typography) - 清晰优雅
 // ============================================
 $font-size-xs: 12px;
 $font-size-sm: 14px;
 $font-size-md: 16px;
 $font-size-lg: 18px;
-$font-size-xl: 20px;
-$font-size-xxl: 24px;
+$font-size-xl: 22px;
+$font-size-xxl: 28px;
 
-$font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-  'Microsoft YaHei', sans-serif;
+// 主字体 - 清晰可读的无衬线字体
+$font-family: 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei',
+  'Hiragino Sans GB', -apple-system, BlinkMacSystemFont, sans-serif;
+
+// 标题字体 - 优雅书法感（仅用于装饰性标题）
+$font-family-heading: 'LXGW WenKai', 'Ma Shan Zheng', 'Long Cang',
+  'Noto Serif SC', 'PingFang SC', sans-serif;
+
+// 代码/等宽字体
+$font-family-mono: 'Cascadia Code', 'JetBrains Mono', 'Fira Code',
+  'Consolas', monospace;
+
+// 字体渲染优化
+$font-smoothing: antialiased;
+$font-weight-normal: 400;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$font-weight-bold: 700;
 
 // ============================================
-// 阴影系统 (Shadows)
+// 阴影系统 (Shadows) - 水墨晕染
 // ============================================
-$shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.08);
-$shadow-md: 0 4px 8px rgba(0, 0, 0, 0.12);
-$shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.15);
+$shadow-sm: 0 2px 8px rgba(106, 150, 136, 0.08), 0 1px 3px rgba(88, 179, 168, 0.06);
+$shadow-md: 0 4px 16px rgba(106, 150, 136, 0.12), 0 2px 6px rgba(88, 179, 168, 0.08);
+$shadow-lg: 0 8px 24px rgba(106, 150, 136, 0.15), 0 4px 12px rgba(88, 179, 168, 0.1);
+$shadow-ink: 0 2px 12px rgba(58, 58, 58, 0.06), 0 1px 4px rgba(58, 58, 58, 0.04); // 墨色阴影
 
 // ============================================
 // 布局配置 (Layout)

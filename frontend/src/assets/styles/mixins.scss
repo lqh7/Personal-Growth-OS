@@ -1,19 +1,37 @@
 @import './variables.scss';
 
 // ============================================
-// 卡片悬停效果
+// 卡片悬停效果 - 云烟缭绕
 // ============================================
 @mixin hover-lift {
-  transition: all $transition-fast;
+  transition: all $transition-base cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    background: linear-gradient(135deg,
+      rgba(136, 179, 168, 0.15) 0%,
+      rgba(158, 179, 191, 0.1) 100%);
+    opacity: 0;
+    z-index: -1;
+    transition: opacity $transition-base;
+  }
 
   &:hover {
-    transform: translateY(-2px);
+    transform: translateY(-4px);
     box-shadow: $shadow-lg;
+
+    &::after {
+      opacity: 1;
+    }
   }
 }
 
 // ============================================
-// 滚动条样式 - 优化版，平时隐藏
+// 滚动条样式 - 水墨笔触效果
 // ============================================
 @mixin custom-scrollbar {
   // 默认隐藏滚动条
@@ -21,29 +39,41 @@
   scrollbar-color: transparent transparent;
 
   &::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: transparent;
-    border-radius: 3px;
-    transition: background-color $transition-fast;
+    background: linear-gradient(180deg,
+      rgba(136, 179, 168, 0) 0%,
+      rgba(136, 179, 168, 0.2) 50%,
+      rgba(136, 179, 168, 0) 100%);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    transition: all $transition-base;
   }
 
   &::-webkit-scrollbar-track {
     background-color: transparent;
+    margin: 4px 0;
   }
 
-  // hover时显示滚动条
+  // hover时显示滚动条 - 水墨晕染效果
   &:hover {
-    scrollbar-color: rgba($color-text-tertiary, 0.3) transparent;
+    scrollbar-color: rgba($color-primary, 0.3) transparent;
 
     &::-webkit-scrollbar-thumb {
-      background-color: rgba($color-text-tertiary, 0.3);
+      background: linear-gradient(180deg,
+        rgba(136, 179, 168, 0.1) 0%,
+        rgba(136, 179, 168, 0.4) 50%,
+        rgba(136, 179, 168, 0.1) 100%);
 
       &:hover {
-        background-color: rgba($color-text-tertiary, 0.5);
+        background: linear-gradient(180deg,
+          rgba(136, 179, 168, 0.2) 0%,
+          rgba(136, 179, 168, 0.6) 50%,
+          rgba(136, 179, 168, 0.2) 100%);
       }
     }
   }
@@ -82,11 +112,36 @@
 }
 
 // ============================================
-// 卡片基础样式
+// 卡片基础样式 - 瓷器质感
 // ============================================
 @mixin card-base {
-  background-color: $bg-color-card;
-  border-radius: $radius-md;
+  background: linear-gradient(145deg,
+    rgba(253, 252, 248, 1) 0%,
+    rgba(253, 252, 248, 0.98) 100%);
+  border-radius: $radius-lg;
   padding: $spacing-lg;
   box-shadow: $shadow-sm;
+  border: 1px solid rgba(217, 212, 201, 0.3);
+  position: relative;
+  overflow: hidden;
+
+  // 瓷器光泽效果
+  &::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle,
+      rgba(255, 255, 255, 0.4) 0%,
+      transparent 70%);
+    opacity: 0;
+    transition: opacity $transition-base;
+    pointer-events: none;
+  }
+
+  &:hover::before {
+    opacity: 0.5;
+  }
 }
