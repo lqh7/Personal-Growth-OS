@@ -21,9 +21,14 @@ async def lifespan(app: FastAPI):
     init_db()
     print("Database initialized")
 
+    # Initialize task reminder scheduler
+    from app.core.scheduler import init_scheduler, shutdown_scheduler
+    init_scheduler()
+
     yield
 
     # Shutdown
+    shutdown_scheduler()
     print("Shutting down Personal Growth OS...")
 
 
@@ -111,3 +116,4 @@ if __name__ == "__main__":
         port=8000,
         reload=settings.DEBUG
     )
+

@@ -28,6 +28,11 @@ class LLMSettingsRead(BaseModel):
     # Common settings
     temperature: Optional[float] = Field(0.7, ge=0, le=2, description="Temperature for generation")
 
+    # DingTalk settings
+    dingtalk_webhook: Optional[str] = Field("", description="DingTalk webhook URL")
+    dingtalk_secret: Optional[str] = Field("", description="DingTalk secret key (optional)")
+    enable_task_reminder: bool = Field(True, description="Enable task reminder feature")
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -62,6 +67,11 @@ class LLMSettingsUpdate(BaseModel):
 
     # Common settings
     temperature: Optional[float] = Field(None, ge=0, le=2, description="Temperature for generation")
+
+    # DingTalk settings
+    dingtalk_webhook: Optional[str] = Field(None, description="DingTalk webhook URL")
+    dingtalk_secret: Optional[str] = Field(None, description="DingTalk secret key (optional)")
+    enable_task_reminder: Optional[bool] = Field(None, description="Enable task reminder feature")
 
     class Config:
         json_schema_extra = {

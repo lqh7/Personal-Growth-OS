@@ -35,6 +35,9 @@ async def get_llm_settings():
             ollama_base_url=env_settings.get("OLLAMA_BASE_URL", "http://localhost:11434"),
             ollama_model=env_settings.get("OLLAMA_MODEL", "llama2"),
             temperature=float(env_settings.get("TEMPERATURE", "0.7")),
+            dingtalk_webhook=env_settings.get("DINGTALK_WEBHOOK", ""),
+            dingtalk_secret=env_settings.get("DINGTALK_SECRET", ""),
+            enable_task_reminder=env_settings.get("ENABLE_TASK_REMINDER", "True") == "True",
         )
 
         return settings
@@ -89,6 +92,18 @@ async def update_llm_settings(updates: LLMSettingsUpdate):
         if updates.temperature is not None:
             env_updates["TEMPERATURE"] = str(updates.temperature)
 
+        # Check if DingTalk settings are being updated
+        dingtalk_updated = False
+        if updates.dingtalk_webhook is not None:
+            env_updates["DINGTALK_WEBHOOK"] = updates.dingtalk_webhook
+            dingtalk_updated = True
+        if updates.dingtalk_secret is not None:
+            env_updates["DINGTALK_SECRET"] = updates.dingtalk_secret
+            dingtalk_updated = True
+        if updates.enable_task_reminder is not None:
+            env_updates["ENABLE_TASK_REMINDER"] = str(updates.enable_task_reminder)
+            dingtalk_updated = True
+
         # Write to .env
         success = service.write_env(env_updates)
 
@@ -97,6 +112,17 @@ async def update_llm_settings(updates: LLMSettingsUpdate):
 
         # Hot-reload settings to apply changes immediately
         reload_settings()
+
+        # Send test message if DingTalk settings were updated and enabled
+        if dingtalk_updated and updates.enable_task_reminder:
+            try:
+                from app.services.dingtalk_service import get_dingtalk_service
+                dingtalk = get_dingtalk_service()
+                if dingtalk.enabled:
+                    dingtalk.bot.send_text(msg="配置已完成", is_at_all=False)
+            except Exception as e:
+                print(f"Failed to send test message: {e}")
+                # Don't fail the whole request if test message fails
 
         # Return updated settings
         return await get_llm_settings()

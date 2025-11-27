@@ -89,6 +89,11 @@ class Task(Base):
         nullable=True,
         comment="For flexible deferral feature - task resurfaces at this time"
     )
+    last_reminder_sent_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="Last time a reminder was sent for this task (防止重复提醒)"
+    )
     parent_task_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("tasks.id"), nullable=True
     )

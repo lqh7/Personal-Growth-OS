@@ -16,6 +16,7 @@ class TaskBase(BaseModel):
     start_time: Optional[datetime] = Field(None, description="Schedule start time")
     end_time: Optional[datetime] = Field(None, description="Schedule end time (optional)")
     snooze_until: Optional[datetime] = None
+    last_reminder_sent_at: Optional[datetime] = Field(None, description="Last time a reminder was sent for this task")
     parent_task_id: Optional[int] = None
     project_id: Optional[int] = None
     completion_notes: Optional[str] = Field(None, description="User's reflection notes when completing the task")
@@ -36,6 +37,7 @@ class TaskUpdate(BaseModel):
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     snooze_until: Optional[datetime] = None
+    last_reminder_sent_at: Optional[datetime] = None
     parent_task_id: Optional[int] = None
     project_id: Optional[int] = None
     completion_notes: Optional[str] = None

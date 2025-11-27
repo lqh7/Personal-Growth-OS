@@ -149,6 +149,51 @@
             </span>
           </el-form-item>
         </div>
+
+        <el-divider />
+
+        <!-- DingTalk Notification Settings -->
+        <div class="dingtalk-section">
+          <h3 class="section-title">钉钉通知配置</h3>
+
+          <el-form-item label="启用任务提醒">
+            <el-switch
+              v-model="formData.enableTaskReminder"
+              active-text="开启"
+              inactive-text="关闭"
+            />
+            <span class="form-hint">
+              开启后将在任务开始前10分钟发送钉钉提醒
+            </span>
+          </el-form-item>
+
+          <el-form-item label="Webhook URL">
+            <el-input
+              v-model="formData.dingtalkWebhook"
+              placeholder="https://oapi.dingtalk.com/robot/send?access_token=..."
+              clearable
+              :disabled="!formData.enableTaskReminder"
+            />
+            <span class="form-hint">
+              钉钉群机器人的 Webhook 地址
+              <a href="https://open.dingtalk.com/document/group/custom-robot-access" target="_blank">如何获取?</a>
+            </span>
+          </el-form-item>
+
+          <el-form-item label="加签密钥 (可选)">
+            <el-input
+              v-model="formData.dingtalkSecret"
+              type="password"
+              placeholder="SEC..."
+              show-password
+              clearable
+              :disabled="!formData.enableTaskReminder"
+            />
+            <span class="form-hint">
+              如果钉钉机器人启用了"加签"安全设置,请填写此密钥
+            </span>
+          </el-form-item>
+        </div>
       </el-form>
 
       <!-- Warning Alert -->
@@ -219,6 +264,10 @@ const formData = reactive({
   ollamaBaseUrl: ollamaBaseUrl.value,
   ollamaModel: ollamaModel.value,
   temperature: temperature.value,
+  // DingTalk settings
+  enableTaskReminder: true,
+  dingtalkWebhook: '',
+  dingtalkSecret: '',
 })
 
 // ============================================================================
@@ -239,6 +288,13 @@ onMounted(async () => {
   formData.ollamaBaseUrl = ollamaBaseUrl.value
   formData.ollamaModel = ollamaModel.value
   formData.temperature = temperature.value
+
+  // Load DingTalk settings from backend
+  const response = await fetch('http://localhost:8000/api/settings/')
+  const data = await response.json()
+  formData.enableTaskReminder = data.enable_task_reminder ?? true
+  formData.dingtalkWebhook = data.dingtalk_webhook || ''
+  formData.dingtalkSecret = data.dingtalk_secret || ''
 })
 
 // ============================================================================
@@ -268,8 +324,29 @@ async function handleSave() {
 
     console.log('[SettingsView] Calling settingsStore.saveSettings()...')
 
-    // Save to backend
-    const result = await settingsStore.saveSettings()
+    // Save to backend (including DingTalk settings)
+    const saveData = {
+      llm_provider: formData.llmProvider,
+      openai_api_key: formData.openaiApiKey,
+      openai_api_base: formData.openaiBaseUrl,
+      openai_model: formData.openaiModel,
+      anthropic_api_key: formData.anthropicApiKey,
+      anthropic_api_base: formData.anthropicBaseUrl,
+      anthropic_model: formData.anthropicModel,
+      ollama_base_url: formData.ollamaBaseUrl,
+      ollama_model: formData.ollamaModel,
+      temperature: formData.temperature,
+      dingtalk_webhook: formData.dingtalkWebhook,
+      dingtalk_secret: formData.dingtalkSecret,
+      enable_task_reminder: formData.enableTaskReminder,
+    }
+
+    const response = await fetch('http://localhost:8000/api/settings/', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(saveData)
+    })
+    const result = { success: response.ok }
 
     console.log('[SettingsView] saveSettings() result:', result)
 
@@ -314,6 +391,9 @@ async function handleReset() {
     formData.ollamaBaseUrl = ollamaBaseUrl.value
     formData.ollamaModel = ollamaModel.value
     formData.temperature = temperature.value
+    formData.enableTaskReminder = true
+    formData.dingtalkWebhook = ''
+    formData.dingtalkSecret = ''
 
     ElMessage.success('配置已重置为默认值')
   } catch (error) {
@@ -364,7 +444,8 @@ async function handleReset() {
 }
 
 .provider-section,
-.common-section {
+.common-section,
+.dingtalk-section {
   margin-bottom: $spacing-lg;
 }
 

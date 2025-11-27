@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     # Format: postgresql://username:password@host:port/database_name
     DATABASE_URL: str = "postgresql://localhost/personal_growth_os"
 
+    # DingTalk Configuration
+    DINGTALK_WEBHOOK: str = ""
+    DINGTALK_SECRET: str = ""
+    ENABLE_TASK_REMINDER: bool = True
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
