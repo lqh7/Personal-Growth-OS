@@ -3,10 +3,13 @@ Settings API endpoints for managing LLM configuration.
 """
 from fastapi import APIRouter, HTTPException
 from typing import Dict
+import logging
 
 from app.schemas.settings import LLMSettingsRead, LLMSettingsUpdate
 from app.services.settings_service import get_settings_service
 from app.core.config import reload_settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -113,16 +116,22 @@ async def update_llm_settings(updates: LLMSettingsUpdate):
         # Hot-reload settings to apply changes immediately
         reload_settings()
 
-        # Send test message if DingTalk settings were updated and enabled
-        if dingtalk_updated and updates.enable_task_reminder:
+        # Reload DingTalk service singleton with new settings
+        if dingtalk_updated:
             try:
-                from app.services.dingtalk_service import get_dingtalk_service
-                dingtalk = get_dingtalk_service()
+                from app.services.dingtalk_service import reload_dingtalk_service
+                dingtalk = reload_dingtalk_service()  # Reload singleton with new settings
+                logger.info(f"DingTalk config updated: enabled={dingtalk.enabled}, webhook={bool(dingtalk.webhook)}")
                 if dingtalk.enabled:
-                    dingtalk.bot.send_text(msg="配置已完成", is_at_all=False)
+                    success = dingtalk.send_text("Personal Growth OS: 配置已保存")
+                    if success:
+                        logger.info("DingTalk test message sent successfully")
+                    else:
+                        logger.warning("Failed to send DingTalk test message")
+                else:
+                    logger.warning("DingTalk is not enabled, skipping test message")
             except Exception as e:
-                print(f"Failed to send test message: {e}")
-                # Don't fail the whole request if test message fails
+                logger.error(f"DingTalk test message error: {e}")
 
         # Return updated settings
         return await get_llm_settings()

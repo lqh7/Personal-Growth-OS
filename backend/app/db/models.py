@@ -92,7 +92,12 @@ class Task(Base):
     last_reminder_sent_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=True,
-        comment="Last time a reminder was sent for this task (防止重复提醒)"
+        comment="Last time a start reminder was sent for this task (防止重复提醒)"
+    )
+    last_end_reminder_sent_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="Last time an end reminder was sent for this task (防止重复提醒)"
     )
     parent_task_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("tasks.id"), nullable=True
