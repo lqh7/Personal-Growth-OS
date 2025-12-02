@@ -145,32 +145,50 @@ defineExpose({
 </script>
 
 <style scoped lang="scss">
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap');
+
 .chat-input-container {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 16px;
-  background: #ffffff;
-  border-top: 1px solid #e4e7ed;
+  gap: 12px;
+  padding: 20px 32px 24px;
+  background: linear-gradient(to top, #FFFFFF 0%, #FAFAF9 100%);
+  border-top: 1px solid #E7E5E4;
 }
 
 .chat-textarea {
   :deep(.el-textarea__inner) {
-    font-size: 14px;
-    line-height: 1.6;
-    padding: 8px 12px;
-    border-radius: 8px;
-    border-color: #dcdfe6;
-    transition: border-color 0.3s;
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1.5px solid #E7E5E4;
+    background: #FFFFFF;
+    color: #2D2D2D;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    letter-spacing: -0.011em;
+
+    &::placeholder {
+      color: #A8A29E;
+      font-style: italic;
+    }
+
+    &:hover {
+      border-color: #D6D3D1;
+    }
 
     &:focus {
-      border-color: #409eff;
-      box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
+      border-color: #8B7355;
+      box-shadow: 0 0 0 3px rgba(139, 115, 85, 0.08);
+      outline: none;
     }
 
     &:disabled {
-      background-color: #f5f7fa;
+      background-color: #FAFAF9;
+      border-color: #E7E5E4;
       cursor: not-allowed;
+      opacity: 0.6;
     }
   }
 }
@@ -179,15 +197,20 @@ defineExpose({
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 0 4px;
 }
 
 .input-hints {
   .hint-text {
-    font-size: 12px;
-    color: #909399;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #A8A29E;
 
     &.disabled {
-      color: #c0c4cc;
+      color: #D6D3D1;
       font-style: italic;
     }
   }
@@ -195,6 +218,50 @@ defineExpose({
 
 .input-actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
+
+  :deep(.el-button--primary) {
+    background: linear-gradient(135deg, #2D2D2D 0%, #3F3F3F 100%);
+    border: none;
+    color: #FFFFFF;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    padding: 10px 24px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &:hover {
+      background: linear-gradient(135deg, #3F3F3F 0%, #525252 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    &:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+
+    &.is-disabled {
+      background: #E7E5E4;
+      color: #A8A29E;
+      box-shadow: none;
+      cursor: not-allowed;
+
+      &:hover {
+        transform: none;
+      }
+    }
+
+    &.is-loading {
+      background: #D6D3D1;
+
+      .el-icon {
+        color: #78716C;
+      }
+    }
+  }
 }
 </style>

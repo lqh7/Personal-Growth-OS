@@ -1,6 +1,6 @@
 """
 LLM Factory - Embeddings generation using sentence-transformers.
-Supports Agno framework for AI agents.
+Supports LangGraph 1.0 framework for AI agents.
 """
 from typing import List, Optional
 from functools import lru_cache
@@ -71,7 +71,7 @@ def get_embeddings() -> EmbeddingService:
 
 def get_chat_model_config() -> dict:
     """
-    Get chat model configuration dictionary for Agno framework.
+    Get chat model configuration dictionary (legacy compatibility).
 
     Returns:
         dict: Configuration dictionary with model, api_key, and optional base_url
@@ -108,3 +108,52 @@ def get_chat_model_config() -> dict:
             "model": settings.OPENAI_MODEL,
             "api_key": settings.OPENAI_API_KEY,
         }
+
+
+def get_langchain_llm():
+    """
+    Get LangChain-compatible LLM instance for LangGraph agents.
+
+    Supports multiple providers:
+    - openai: ChatOpenAI
+    - claude: ChatAnthropic
+    - ollama: ChatOllama
+
+    Returns:
+        LangChain ChatModel instance with streaming enabled
+
+    Raises:
+        ValueError: If provider is not supported
+    """
+    provider = settings.LLM_PROVIDER
+
+    if provider == "openai":
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=settings.OPENAI_MODEL,
+            api_key=settings.OPENAI_API_KEY,
+            base_url=getattr(settings, "OPENAI_API_BASE", None),
+            streaming=True,
+            temperature=0.7,
+        )
+
+    elif provider == "claude":
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(
+            model=settings.ANTHROPIC_MODEL,
+            api_key=settings.ANTHROPIC_API_KEY,
+            base_url=getattr(settings, "ANTHROPIC_API_BASE", None) if getattr(settings, "ANTHROPIC_API_BASE", None) else None,
+            streaming=True,
+            temperature=0.7,
+        )
+
+    elif provider == "ollama":
+        from langchain_community.chat_models import ChatOllama
+        return ChatOllama(
+            model=settings.OLLAMA_MODEL,
+            base_url=settings.OLLAMA_BASE_URL,
+            temperature=0.7,
+        )
+
+    else:
+        raise ValueError(f"Unsupported LLM provider: {provider}. Supported: openai, claude, ollama")

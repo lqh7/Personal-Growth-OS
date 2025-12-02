@@ -120,40 +120,85 @@ function handleClose() {
 </script>
 
 <style scoped lang="scss">
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@600&family=Inter:wght@400;500&display=swap');
+
 .chat-panel {
   display: flex;
   flex-direction: column;
-  background: #ffffff;
-  border-left: 1px solid #e4e7ed;
-  flex-shrink: 0; // 不允许压缩
-  min-width: 350px; // 设计要求：最小350px
-  overflow: hidden; // 防止内容溢出
+  background: #FFFFFF;
+  border-left: 1px solid #E7E5E4;
+  flex-shrink: 0;
+  min-width: 420px;
+  overflow: hidden;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.04);
 }
 
 .chat-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid #e4e7ed;
-  background: #f5f7fa;
-  flex-shrink: 0; // Header固定高度
+  padding: 24px 32px;
+  border-bottom: 1px solid #E7E5E4;
+  background: linear-gradient(to bottom, #FAFAF9 0%, #FFFFFF 100%);
+  flex-shrink: 0;
 
   .header-left {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
 
     .header-title {
-      font-size: 16px;
+      font-family: 'Crimson Pro', serif;
+      font-size: 18px;
       font-weight: 600;
-      color: #303133;
+      letter-spacing: -0.02em;
+      color: #2D2D2D;
+    }
+
+    :deep(.el-icon) {
+      color: #8B7355 !important;
+      transition: transform 0.3s ease;
+
+      &:hover {
+        transform: rotate(15deg) scale(1.1);
+      }
+    }
+
+    :deep(.el-tag) {
+      background: #F5F3F0;
+      border: 1px solid #E7E5E4;
+      color: #57534E;
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 12px;
     }
   }
 
   .header-actions {
     display: flex;
     gap: 8px;
+
+    :deep(.el-button) {
+      background: transparent;
+      border: 1.5px solid #E7E5E4;
+      color: #57534E;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+      &:hover {
+        background: #FAFAF9;
+        border-color: #8B7355;
+        color: #2D2D2D;
+        transform: translateY(-1px);
+      }
+
+      &:active {
+        transform: translateY(0);
+      }
+    }
   }
 }
 </style>

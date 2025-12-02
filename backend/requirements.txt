@@ -12,8 +12,14 @@ pgvector>=0.2.4
 pydantic==2.9.2
 pydantic-settings==2.6.1
 
-# AI & LLM - Agno Framework
-agno>=0.3.0
+# AI & LLM - LangGraph Framework
+langgraph>=0.2.0
+langgraph-checkpoint-postgres>=2.0.0  # LangGraph PostgreSQL持久化
+langchain>=0.3.0
+langchain-openai>=0.2.0
+langchain-anthropic>=0.2.0  # 支持 Claude
+langchain-community>=0.3.0  # 支持 Ollama
+psycopg-binary>=3.2.0  # PostgreSQL driver (binary for Windows)
 
 # Embeddings (for vector generation)
 sentence-transformers>=2.2.0

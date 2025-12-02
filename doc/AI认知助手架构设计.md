@@ -1,12 +1,12 @@
 # AI认知助手系统架构设计文档
 
 > **📌 实施状态说明**
-> - **当前状态**: ❌ **未实现** - 本文档为目标架构设计
-> - **现有实现**: 使用LangGraph实现的Task Igniter Agent (任务分解功能)
+> - **当前状态**: ⏸️ **部分实现** - 基础Agent功能已就绪
+> - **已实现**: Task Igniter Agent (LangGraph 1.0 StateGraph + llama-index RAG + FastMCP工具)
 > - **未来计划**: 完整的双通道架构、三层记忆系统、学习闭环尚未实施
-> - **技术栈差异**: 文档描述使用Redis+MongoDB+ChromaDB+Mem0，当前仅使用SQLite+ChromaDB
+> - **技术栈**: 当前使用LangGraph 1.0 + llama-index + PostgreSQL + pgvector，计划引入Redis + MongoDB + Mem0
 >
-> 本文档描述的是**长期愿景架构**，而非当前系统状态。实际开发请参考 `后端详细设计.md` 了解当前实现。
+> 本文档描述的是**长期愿景架构**，当前MVP已实现基础Agent能力。实际开发请参考 `系统现状总结.md` 了解当前实现。
 
 ---
 
@@ -1089,10 +1089,13 @@ graph TD
 
 | 组件 | 推荐技术 | 理由 | 替代方案 |
 |------|---------|------|---------|
-| **Working Memory** | **Redis** | ReAct高频读写，内存KV是唯一选择 | 无（必须用Redis） |
-| **Conversation History** | **MongoDB** | JSON灵活性 + 查询能力 > 运维成本 | SQLite + JSON |
-| **Long-Term Memory** | **ChromaDB** | 复用现有，语义检索能力成熟 | Pinecone（云服务） |
-| **User Model** | **Mem0** | 专业工具，个性化核心竞争力 | Agno User Memories |
+| **Agent框架** | **LangGraph 1.0** | LangChain官方、StateGraph架构、生产级特性 | - |
+| **RAG框架** | **llama-index 0.14.6** | 专业RAG能力、pgvector原生集成、自动化程度高 | - |
+| **工具集成** | **FastMCP** | 标准化工具协议、类型安全、调试友好 | 直接函数定义 |
+| **向量存储** | **PostgreSQL + pgvector** | 统一数据库、云端部署、ACID事务 | ChromaDB (已替换) |
+| **Working Memory** | **Redis** (计划中) | ReAct高频读写，内存KV是唯一选择 | PostgreSQL (当前MVP) |
+| **Conversation History** | **MongoDB** (计划中) | JSON灵活性 + 查询能力 > 运维成本 | PostgreSQL (当前MVP) |
+| **User Model** | **Mem0** (计划中) | 专业工具，个性化核心竞争力 | - |
 | **LLM** | **OpenAI GPT-4o** | 性价比高，生态成熟 | Claude 3.5 Sonnet |
 | **Triage LLM** | **GPT-4o-mini** | 轻量级，低成本 | Claude Haiku |
 
@@ -1137,15 +1140,23 @@ graph TD
 
 ### 6.4 技术选型总结
 
-**新增依赖（相比现有架构）**:
-1. **Redis**: 必须引入（Working Memory刚需）
-2. **MongoDB**: 强烈推荐（会话归档最优方案）
-3. **Mem0**: 推荐引入（个性化核心竞争力）
+**当前实现（MVP阶段）**:
+1. **LangGraph 1.0**: Agent框架 (StateGraph架构)
+2. **llama-index 0.14.6**: RAG框架 (专业数据框架)
+3. **FastMCP**: 工具集成协议
+4. **PostgreSQL + pgvector**: 统一数据库 (关系数据 + 向量数据)
+5. **FastAPI**: Web框架
+6. **OpenAI GPT-4o / GPT-4o-mini**: LLM服务
 
-**复用现有技术**:
-1. **ChromaDB**: 保持不变（Long-Term Memory）
-2. **FastAPI**: 保持不变（后端框架）
-3. **SQLite**: 保留用于业务数据（tasks, notes, projects）
+**计划引入（未来增强）**:
+1. **Redis**: Working Memory（高频读写场景刚需）
+2. **MongoDB**: Conversation History（会话归档最优方案）
+3. **Mem0**: User Model（个性化核心竞争力）
+
+**已废弃技术**:
+1. ~~**Agno**~~ - 已迁移到LangGraph 1.0
+2. ~~**ChromaDB**~~ - 已迁移到PostgreSQL + pgvector
+3. ~~**手动sentence-transformers调用**~~ - 改用llama-index管理
 
 ---
 
@@ -1544,8 +1555,9 @@ graph TD
 
 1. **双系统理论**: Kahneman, D. (2011). *Thinking, Fast and Slow*
 2. **ReAct范式**: Yao et al. (2022). *ReAct: Synergizing Reasoning and Acting in Language Models*
-3. **Agno框架**: https://docs.agno.com/introduction
-4. **Mem0文档**: https://docs.mem0.ai/
+3. **LangGraph文档**: https://langchain-ai.github.io/langgraph/
+4. **llama-index文档**: https://docs.llamaindex.ai/
+5. **Mem0文档**: https://docs.mem0.ai/
 
 ---
 

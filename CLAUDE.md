@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Personal Growth OS** is a "second brain" application designed to accelerate personal growth by helping users combat procrastination, solidify knowledge, and drive continuous self-improvement through data-driven reflection.
 
-**Current Status**: MVP in active development. Backend uses **Agno** for AI agents, with **PostgreSQL + pgvector** for unified data and vector storage. Frontend features weekly schedule view, task kanban with floating task column, AI chat panel, and comprehensive task/note management. Chinese character encoding is fully supported.
+**Current Status**: MVP in active development. Backend uses **LangGraph 1.0** for AI agents, **llama-index 0.14.6** for RAG, with **PostgreSQL + pgvector** for unified data and vector storage. Frontend features weekly schedule view, task kanban with floating task column, AI chat panel, and comprehensive task/note management. Chinese character encoding is fully supported.
 
-**IMPORTANT**: The actual implementation uses **Agno** framework, NOT LangGraph. Reference `backend/app/agents/task_igniter_agno.py` for the agent implementation pattern.
+**IMPORTANT**: The actual implementation uses **LangGraph 1.0** framework. Reference `backend/app/agents/task_igniter_langgraph.py` for the agent implementation pattern. Tool integration (FastMCP/RAG) will be added in future iterations.
 
 ### Core Mission (Three Pillars)
 
@@ -30,9 +30,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Backend:**
 - FastAPI (Python 3.10+)
-- **Agno** (lightweight AI agent framework)
+- **LangGraph 1.0** (state-of-the-art AI agent framework by LangChain)
+- **llama-index 0.14.6** (RAG and data framework for LLM apps) - 计划集成
 - SQLAlchemy + **PostgreSQL** (cloud-hosted)
 - **pgvector** extension (vector similarity search)
+- sentence-transformers (现有embedding实现)
 
 **Data Layer:**
 - **PostgreSQL + pgvector** - Unified database solution (cloud-hosted)
@@ -47,8 +49,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - API Layer (`/app/api/endpoints/`) - Request handling and validation
   - Service Layer (`/app/services/`) - Core business logic
   - Data Access Layer (`/app/crud/`) - Database operations abstraction
-- **Separation of Concerns**: Complex AI logic encapsulated as Agno Agents with declarative configuration
-- **Agent-First**: Use Agno's declarative agent definitions with automatic tool management and user memory
+- **Separation of Concerns**: Complex AI logic encapsulated as LangGraph StateGraph with declarative configuration
+- **Agent-First**: Use LangGraph's state-based agent definitions (tool integration planned for future)
 
 ## Development Commands
 
@@ -210,11 +212,12 @@ Core entities with relationships:
 
 ### Critical Features
 
-1. **Task Ignition Ritual (任务启动仪式)** - IMPLEMENTED (Agno)
-   - Automatic task decomposition for vague/large tasks via Agno Agent
-   - Tool-based knowledge retrieval (search_knowledge_base, format_task_summary)
+1. **Task Ignition Ritual (任务启动仪式)** - IMPLEMENTED (LangGraph)
+   - Automatic task decomposition for vague/large tasks via LangGraph StateGraph
+   - Pure LLM-based reasoning (tool integration planned for future)
    - Generation of "minimum viable starting task" to reduce action friction
-   - **Implementation**: `backend/app/agents/task_igniter_agno.py` using Agno declarative agent with function tools
+   - **Implementation**: `backend/app/agents/task_igniter_langgraph.py` using LangGraph StateGraph
+   - **Future**: Tool-based knowledge retrieval (RAG) and task formatting tools
 
 2. **Calendar/Schedule View (日程管理)** - IMPLEMENTED
    - Weekly schedule visualization with time-slot planning (8:00-21:00 viewport)
@@ -233,9 +236,10 @@ Core entities with relationships:
    - Display in dedicated "延后任务" section on DashboardView
 
 4. **Contextual Knowledge Resurrection (知识自动重现)** - IMPLEMENTED
-   - Semantic search API implemented via **pgvector** (PostgreSQL extension)
-   - Note embeddings auto-generated on create/update using sentence-transformers
-   - Vector similarity search with cosine distance
+   - Semantic search API implemented via **llama-index PGVectorStore**
+   - Note embeddings auto-generated on create/update using llama-index embedding models
+   - Vector similarity search with cosine distance through llama-index QueryEngine
+   - Supports hybrid retrieval (text + vector)
    - Proactive suggestion UI pending
 
 5. **Attachment Management (附件管理)** - IMPLEMENTED
@@ -277,7 +281,7 @@ backend/app/
 ├── main.py                  # FastAPI entry point, CORS, UTF-8 encoding middleware
 ├── core/
 │   ├── config.py           # Settings (Pydantic BaseSettings from .env)
-│   └── llm_factory.py      # LLM provider abstraction (OpenAI/Claude/Ollama)
+│   └── llm_factory.py      # LLM provider abstraction (LangGraph + llama-index)
 ├── db/
 │   ├── database.py         # SQLAlchemy engine and session management
 │   └── models.py           # SQLAlchemy ORM models (all entities)
@@ -290,11 +294,11 @@ backend/app/
 │   ├── crud_note.py
 │   └── crud_project.py
 ├── services/               # Business logic layer
-│   ├── vector_store.py     # pgvector integration (semantic search)
+│   ├── vector_store.py     # pgvector integration (现有实现)
 │   ├── file_storage.py     # File upload/download service
-│   └── chunking.py         # Text chunking service (for RAG)
-├── agents/                 # Agno agents
-│   └── task_igniter_agno.py  # Task decomposition Agno Agent
+│   └── chunking.py         # Text chunking
+├── agents/                 # LangGraph agents
+│   └── task_igniter_langgraph.py  # Task decomposition LangGraph agent
 └── api/endpoints/          # FastAPI routers
     ├── tasks.py            # Task CRUD + /ignite endpoint
     ├── notes.py            # Note CRUD + semantic search
@@ -347,84 +351,61 @@ frontend/src/
 
 ## Key Architectural Patterns
 
-### Agno Agent Pattern
+### LangGraph Agent Pattern
 
-The Task Igniter Agent (backend/app/agents/task_igniter_agno.py:1) demonstrates the Agno pattern:
+The Task Igniter Agent (backend/app/agents/task_igniter_langgraph.py) demonstrates the LangGraph 1.0 pattern:
 
-1. **Tool Definition**: Define Python functions that agents can call
-   ```python
-   def search_knowledge_base(query: str, limit: int = 5) -> List[Dict[str, Any]]:
-       """Search the knowledge base for related notes."""
-       # Implementation
-       return results
+**Core Concepts**:
 
-   def format_task_summary(main_title: str, subtasks: List[Dict]) -> str:
-       """Format task decomposition results."""
-       # Implementation
-       return formatted_summary
-   ```
+1. **StateGraph Architecture**: State-based agent workflow built on a directed graph
+   - Nodes represent processing steps (agent reasoning, error handling)
+   - Edges define flow between nodes (normal transitions and conditional routing)
+   - State is a TypedDict that flows through the graph
 
-2. **Agent Creation**: Declarative configuration with OpenAI-compatible model
-   ```python
-   from agno.agent import Agent
-   from agno.models.openai import OpenAIChat
+2. **Graph Construction** (current implementation):
+   - Define agent node that invokes LLM
+   - Simple linear flow: Entry → Agent → END
+   - Compile graph into executable runnable
 
-   model = OpenAIChat(
-       id="gpt-4",
-       api_key=settings.OPENAI_API_KEY,
-       base_url=settings.OPENAI_API_BASE
-   )
+3. **Execution Modes**:
+   - Synchronous: graph.invoke() for blocking execution
+   - Asynchronous: graph.ainvoke() for async workflows
+   - Streaming: graph.astream_events() for real-time updates
 
-   agent = Agent(
-       id="task-igniter",
-       name="Task Igniter Agent",
-       model=model,
-       instructions="你是一个任务分解专家...",
-       tools=[search_knowledge_base, format_task_summary],
-       markdown=True,
-       stream_intermediate_steps=True
-   )
-   ```
+**Key Features**:
+- Pure LLM-based reasoning (no tools in current version)
+- Streaming support for incremental responses via SSE
+- Multi-provider support (OpenAI, Claude, Ollama)
+- State management via message-based architecture
 
-3. **Execution**:
-   ```python
-   # Synchronous
-   response = agent.run(user_input, stream=False)
+**Future Enhancements** (planned):
+- Tool integration for knowledge retrieval and task formatting
+- Conditional routing based on LLM tool calls
+- Integration with llama-index for RAG capabilities
 
-   # Asynchronous
-   response = await agent.arun(user_input, stream=False)
-   ```
-
-**Key Principles**:
-- Declarative agent configuration (no manual state management)
-- Functions passed directly as tools (automatic schema generation)
-- Built-in streaming and markdown support
-- OpenAI-compatible API for multiple LLM providers
+Reference implementation: backend/app/agents/task_igniter_langgraph.py
 
 ### LLM Provider Integration
 
-The system supports multiple LLM providers. Configuration is centralized in `.env`:
+The system supports multiple LLM providers through unified configuration in `.env`:
 - `LLM_PROVIDER=openai|claude|ollama`
-- API keys and base URLs for each provider
+- Provider-specific API keys and base URLs
 
-For embeddings, use `core/llm_factory.py`:
+**For LangGraph Agents**:
+- Use `core/llm_factory.py::get_langgraph_model()` to get LangChain LLM instance
+- Returns ChatOpenAI, ChatAnthropic, or ChatOllama based on configuration
+- Automatically configures API keys and endpoints
 
-```python
-from app.core.llm_factory import get_embeddings
+**For llama-index RAG**:
+- Use `core/llm_factory.py::get_llamaindex_llm()` for LLM
+- Use `core/llm_factory.py::get_llamaindex_embed_model()` for embeddings
+- Supports OpenAI, Anthropic, or local embedding models
+- llama-index ServiceContext automatically manages these components
 
-# Get embedding service (sentence-transformers)
-embeddings = get_embeddings()
-
-# Generate embedding vector
-vector = embeddings.embed_query("Your text here")
-```
-
-For Agno agents, use `get_chat_model_config()`:
-```python
-from app.core.llm_factory import get_chat_model_config
-
-config = get_chat_model_config()  # Returns dict with model, api_key, base_url
-```
+**Embedding Models**:
+- OpenAI: text-embedding-3-small (1536 dimensions)
+- Local: sentence-transformers models (e.g., all-MiniLM-L6-v2, 384 dimensions)
+- Configured via llama-index embedding integrations
 
 ### Three-Layer Backend Architecture
 
@@ -447,33 +428,33 @@ config = get_chat_model_config()  # Returns dict with model, api_key, base_url
 
 ### Frontend State Management (Pinia)
 
-Stores follow consistent pattern:
-```typescript
-export const useTaskStore = defineStore('task', () => {
-  const tasks = ref<Task[]>([])
+Stores follow composition API pattern with reactive state:
+- Use `defineStore` with setup function syntax
+- Reactive state with `ref()` and `computed()`
+- Async actions for API calls
+- Return public API for component consumption
 
-  async function fetchTasks() {
-    const response = await api.get('/tasks/')
-    tasks.value = response.data
-  }
-
-  return { tasks, fetchTasks }
-})
-```
+Example stores: taskStore, noteStore, projectStore, chatStore, settingsStore, uiStore
 
 ### Database & Memory Architecture
 
-**PostgreSQL + pgvector** (cloud-hosted):
+**PostgreSQL + pgvector (via llama-index)**:
 - **Relational tables**: tasks, notes, projects, tags (SQLAlchemy ORM)
-- **Vector storage**: note_embeddings table with pgvector extension
-  - Embedding dimension: 384 (all-MiniLM-L6-v2 model)
-  - Index type: IVFFlat for fast similarity search
+- **Vector storage**: Managed by llama-index PGVectorStore
+  - Embedding dimension: Configurable (384 or 1536 based on model)
+  - Index type: IVFFlat automatically managed by llama-index
   - Distance metric: Cosine similarity
+  - Hybrid search: Combines text and vector retrieval
 - **Benefits**:
-  - Single database eliminates sync issues between SQLite and ChromaDB
+  - Single database eliminates sync issues
   - ACID transactions ensure data consistency
-  - Cloud deployment enables remote access and automatic backups
+  - llama-index abstracts vector operations
+  - Cloud deployment ready with automatic backups
   - Native SQL joins between relational and vector data
+- **llama-index Integration**:
+  - VectorStoreIndex for semantic search
+  - ServiceContext for LLM and embedding configuration
+  - QueryEngine for flexible retrieval strategies
 
 ### SSE Streaming Architecture (Chat Interface)
 
@@ -490,14 +471,7 @@ The chat interface uses Server-Sent Events (SSE) for real-time streaming:
 - Automatic message assembly from partial chunks
 - Connection cleanup on component unmount
 
-**Format**:
-```
-data: {"event_type": "RunContent", "content": "partial text..."}
-
-data: {"event_type": "ToolCallStarted", "tool_name": "search_knowledge_base"}
-
-data: {"event_type": "RunCompleted", "final_response": "..."}
-```
+**Format**: JSON events with event_type field (RunContent, ToolCallStarted, RunCompleted, etc.)
 
 ## Implementation Guidelines
 
@@ -513,15 +487,21 @@ data: {"event_type": "RunCompleted", "final_response": "..."}
    - Register router in backend/app/main.py:1
    - Use dependency injection for `db: Session = Depends(get_db)`
 
-3. **AI Features using Agno**:
-   - Define tool functions (plain Python functions with docstrings)
-   - Create Agent with declarative configuration
-   - Pass tools as list of function references
-   - Configure model (OpenAI-compatible)
-   - Expose via API endpoint (sync or async)
-   - Reference backend/app/agents/task_igniter_agno.py:1 for pattern
+3. **AI Features using LangGraph**:
+   - Create StateGraph with defined nodes and edges
+   - Define agent node that invokes LLM
+   - Add edges (linear flow or conditional routing)
+   - Compile graph and expose via API endpoint
+   - Reference backend/app/agents/task_igniter_langgraph.py for pattern
+   - Tool integration (optional): Use @tool decorator or ToolNode
 
-4. **Frontend Features**:
+4. **RAG Features** (current implementation):
+   - Use existing vector_store.py for semantic search
+   - Embeddings via sentence-transformers
+   - pgvector for vector similarity matching
+   - Future: Migrate to llama-index for advanced RAG capabilities
+
+5. **Frontend Features**:
    - Create components in frontend/src/components/
    - Add pages in frontend/src/views/
    - Define Pinia stores in frontend/src/stores/
@@ -589,21 +569,56 @@ try {
 }
 ```
 
-## Agno Best Practices
+## LangGraph + llama-index Best Practices
 
-1. **Tool Design**: Keep tools focused and single-purpose with clear docstrings
-2. **Type Hints**: Use Python type hints for automatic schema generation
-3. **Instructions**: Write clear, detailed system instructions in Chinese for better results
-4. **Model Config**: Use OpenAI-compatible models via `OpenAIChat` wrapper
-5. **Streaming**: Enable `stream_intermediate_steps=True` for transparent tool calls
-6. **Error Handling**: Let Agno handle retries; implement graceful fallbacks in tools
+### LangGraph Agent Development
+
+1. **State Design**: Use TypedDict with clear field annotations for agent state
+   - Keep state minimal - only data needed for routing decisions
+   - Use Annotated with reducer functions for list fields
+
+2. **Graph Structure**: Favor simple, linear flows over complex branching
+   - Use conditional edges for tool routing
+   - Leverage prebuilt components (ToolNode, tools_condition)
+
+3. **Tool Integration**: Use FastMCP for clean tool definitions
+   - One MCP server per agent or logical grouping
+   - Async tool functions for I/O operations
+   - Type hints for automatic JSON Schema generation
+
+4. **Error Handling**: Implement error nodes in graph
+   - Use try/except in node functions
+   - Add retry logic with exponential backoff
+
+5. **Streaming**: Use `astream_events` for real-time updates
+   - Stream tool calls and LLM tokens separately
+   - Implement proper event filtering for frontend
+
+### llama-index RAG Development
+
+1. **Index Design**: One index per data type (notes, tasks, etc.)
+   - Use PGVectorStore for persistent storage
+   - Configure appropriate chunk size (default 512)
+
+2. **Query Engines**: Choose the right engine type
+   - VectorIndexRetriever for pure semantic search
+   - RetrieverQueryEngine with postprocessors for advanced filtering
+   - SubQuestionQueryEngine for complex multi-step queries
+
+3. **Embeddings**: Use consistent embed_model across indexing and querying
+   - OpenAI embeddings for best quality
+   - Local models (sentence-transformers) for privacy
+
+4. **Performance**: Implement caching and lazy loading
+   - Cache ServiceContext and query engines
+   - Use `as_query_engine()` method for efficiency
 
 ## Testing and Quality Assurance
 
 **Manual Testing**:
 - Backend: Use API documentation at http://localhost:8000/docs for interactive testing
 - Frontend: Manual browser testing (no automated test framework currently)
-- Agno Agents: Test via direct `agent.run()` calls or API endpoints
+- LangGraph Agents: Test via direct `graph.invoke()` calls or API endpoints
 
 **Integration Testing Scripts** (in `tests/legacy/`):
 - `run_tests.py` - Lightweight integration tests for core API functionality
@@ -624,7 +639,7 @@ See `tests/README.md` for more details on available test scripts and fixtures.
 Project documentation files:
 - **`doc/系统现状总结.md`** ⭐ - **Current implementation status** (most accurate, use this first!)
 - `doc/需求分析.md` - Requirements and feature specifications (Chinese)
-- `doc/框架选型.md` - Framework selection rationale (explains Agno choice)
+- `doc/框架选型.md` - Framework selection rationale (explains LangGraph choice)
 - `doc/后端详细设计.md` - Backend detailed design (may reference older LangGraph plans)
 - `doc/前端详细设计.md` - Frontend detailed design
 - `doc/日程表详细设计.md` - Schedule view implementation details
@@ -667,13 +682,13 @@ This allows Claude Code to execute commands and make file changes without reques
 1. **DON'T** put SQL queries in API endpoints - use CRUD layer
 2. **DON'T** skip TypeScript type definitions when adding new features
 3. **DON'T** forget UTF-8 encoding for Chinese characters (FastAPI uses `UTF8JSONResponse` + middleware)
-4. **DON'T** use LangGraph/LangChain patterns - this project uses Agno
-5. **DON'T** use ChromaDB - this project uses pgvector for vector storage
-6. **DO** use Agno for AI agents with declarative configuration
-7. **DO** use sentence-transformers for embeddings (not LangChain embeddings)
-8. **DO** refer to backend/app/agents/task_igniter_agno.py:1 for Agno patterns
-9. **DO** refer to doc/日程表详细设计.md for schedule view implementation details
-10. **DO** refer to doc/系统现状总结.md for current implementation status
+4. **DON'T** use outdated agent frameworks - this project uses **LangGraph 1.0**
+5. **DO** use LangGraph StateGraph for all agent workflows
+6. **DO** refer to backend/app/agents/task_igniter_langgraph.py for LangGraph patterns
+7. **DO** check LangGraph官方文档 for latest best practices
+8. **DO** refer to doc/系统现状总结.md for current implementation status
+9. **DO** use sentence-transformers for embeddings (暂时保持现有实现)
+10. **DO** use existing vector_store.py for RAG功能 (暂时保持现有实现)
 
 ## Known Implementation Details
 
@@ -707,31 +722,53 @@ The backend uses a custom `UTF8JSONResponse` class and middleware to ensure prop
 
 ## Technology Stack Clarification
 
-**IMPORTANT**: This project uses **Agno** for AI agents (NOT LangGraph) and **PostgreSQL + pgvector** for data storage (NOT SQLite + ChromaDB).
+**IMPORTANT**: This project uses **LangGraph 1.0** for AI agents and **llama-index 0.14.6** for RAG framework, with **PostgreSQL + pgvector** for unified data storage.
+
+**Current Implementation**:
+- **Agent Framework**: LangGraph 1.0 (StateGraph-based orchestration)
+- **RAG Framework**: llama-index 0.14.6 (specialized data framework for LLM applications)
+- **Tool Integration**: FastMCP (standard tool protocol for LangGraph)
+- **Database**: PostgreSQL + pgvector (cloud-hosted, unified storage)
+- **Embedding**: Managed by llama-index (sentence-transformers backend)
 
 **Framework Evolution**:
 - Initial plan: LangGraph + SQLite + ChromaDB
-- Current implementation: **Agno** + **PostgreSQL + pgvector**
-- Reason: Simpler API, unified database, cloud deployment ready
+- Early implementation: Agno + PostgreSQL + sentence-transformers (manual RAG)
+- **Current**: **LangGraph 1.0** + **llama-index 0.14.6** + PostgreSQL + pgvector
+- Reason: Industry-standard frameworks, better ecosystem, professional RAG capabilities, long-term maintainability
 
 **Database Migration (2025-11)**: Migrated from dual-database (SQLite + ChromaDB) to unified PostgreSQL + pgvector:
 - Single data source eliminates sync issues
 - ACID transactions for data consistency
-- pgvector extension for efficient vector similarity search
+- pgvector extension for efficient vector similarity search (managed by llama-index)
 - Cloud deployment enables remote access and automatic backups
 
+**Key Dependencies**:
+
+LangGraph Ecosystem:
+- `langgraph>=0.2.0` - State-based agent orchestration
+- `langchain>=0.3.0` - Core LangChain library
+- `langchain-openai` / `langchain-anthropic` / `langchain-community` - LLM integrations
+
+Vector & Embeddings:
+- `sentence-transformers>=2.2.0` - Embedding generation
+- `pgvector>=0.2.4` - Vector similarity search
+
+Database:
+- `psycopg2-binary>=2.9.9` - PostgreSQL driver
+- `sqlalchemy==2.0.36` - ORM
+
 **Dependencies Removed**:
-- `langgraph`, `langchain-*` - Replaced by Agno
-- `chromadb` - Replaced by pgvector
-- `mem0ai` - Not currently used
-- `alembic` - Not needed for MVP
+- `agno` - Replaced by LangGraph 1.0
 
-**Dependencies Added**:
-- `psycopg2-binary` - PostgreSQL driver
-- `pgvector` - Vector extension support
-- `sentence-transformers` - Local embedding generation
+**Future Dependencies** (planned):
+- `llama-index` - Advanced RAG framework
+- `fastmcp` - Tool integration protocol
+- `mem0ai` - User memory management
 
-Refer to:
+**Reference Documentation**:
+- LangGraph: https://langchain-ai.github.io/langgraph/
+- llama-index: https://docs.llamaindex.ai/
 - `doc/系统现状总结.md` - Current implementation status
-- `doc/数据库迁移指南.md` - Database migration details
-- `backend/app/agents/task_igniter_agno.py` - Reference implementation
+- `doc/框架选型.md` - Framework selection rationale
+- `backend/app/agents/task_igniter_langgraph.py` - Reference implementation

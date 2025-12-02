@@ -360,6 +360,125 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // ============================================================================
+  // Actions - Send Message
+  // ============================================================================
+
+  /**
+   * Send message to AI agent
+   * Handles SSE streaming from backend LangGraph agent
+   */
+  async function sendMessage(message: string): Promise<void> {
+    // 1. Precondition check
+    if (isStreaming.value) {
+      console.warn('[ChatStore] Already streaming, ignoring new message')
+      return
+    }
+
+    // Clear previous errors
+    setStreamingError('')
+
+    // 2. Add user message
+    const userMessage: ChatMessage = {
+      id: `msg_${Date.now()}_user`,
+      role: 'user',
+      content: message,
+      created_at: new Date()
+    }
+    addMessage(userMessage)
+
+    // 3. Create assistant placeholder message
+    const assistantMessage: ChatMessage = {
+      id: `msg_${Date.now()}_assistant`,
+      role: 'assistant',
+      content: '',
+      created_at: new Date()
+    }
+    addMessage(assistantMessage)
+
+    // 4. Set streaming state
+    setStreaming(true)
+
+    try {
+      // 5. Construct API request
+      const url = 'http://localhost:8000/api/chat/agents/task-igniter/runs'
+
+      // Build form data
+      const formData = new URLSearchParams()
+      formData.append('message', message)
+      formData.append('stream', 'true')
+
+      if (currentSessionId.value) {
+        formData.append('session_id', currentSessionId.value)
+      }
+
+      if (currentTaskId.value) {
+        formData.append('dependencies', JSON.stringify({ task_id: currentTaskId.value }))
+      }
+
+      // 6. Send request and process SSE stream
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: formData.toString()
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      if (!response.body) {
+        throw new Error('Response body is null')
+      }
+
+      // Read stream
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+
+        if (done) {
+          break
+        }
+
+        // Decode chunk
+        buffer += decoder.decode(value, { stream: true })
+
+        // Process complete lines (JSON events)
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || '' // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          const trimmedLine = line.trim()
+          if (!trimmedLine) continue
+
+          try {
+            // Parse JSON event
+            const chunk: RunResponseContent = JSON.parse(trimmedLine)
+
+            // Process chunk using existing logic
+            processStreamChunk(chunk)
+          } catch (parseError) {
+            console.error('[ChatStore] Failed to parse SSE chunk:', parseError, 'Line:', trimmedLine)
+          }
+        }
+      }
+
+    } catch (error: any) {
+      // 7. Error handling
+      console.error('[ChatStore] sendMessage error:', error)
+      setLastMessageError(true)
+      setStreamingError(error.message || 'Unknown error occurred')
+    } finally {
+      // 8. Cleanup
+      setStreaming(false)
+    }
+  }
+
+  // ============================================================================
   // Actions - Stream Event Processing
   // ============================================================================
 
@@ -498,6 +617,7 @@ export const useChatStore = defineStore('chat', () => {
     focusChatInput,
 
     // Actions - Stream Processing
-    processStreamChunk
+    processStreamChunk,
+    sendMessage
   }
 })

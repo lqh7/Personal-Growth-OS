@@ -99,6 +99,7 @@ class SettingsService:
                         "ANTHROPIC_MODEL"
                     ],
                     "Ollama Settings": [
+                        "OLLAMA_API_KEY",
                         "OLLAMA_BASE_URL",
                         "OLLAMA_MODEL"
                     ],

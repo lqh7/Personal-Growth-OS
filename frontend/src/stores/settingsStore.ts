@@ -30,6 +30,7 @@ export interface LLMSettings {
   anthropicModel: string
 
   // Ollama settings
+  ollamaApiKey: string
   ollamaBaseUrl: string
   ollamaModel: string
 
@@ -51,6 +52,7 @@ const DEFAULT_SETTINGS: LLMSettings = {
   anthropicApiKey: '',
   anthropicBaseUrl: '',
   anthropicModel: 'claude-3-sonnet-20240229',
+  ollamaApiKey: '',
   ollamaBaseUrl: 'http://localhost:11434',
   ollamaModel: 'llama2',
   temperature: 0.7,
@@ -78,6 +80,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const anthropicModel = ref(DEFAULT_SETTINGS.anthropicModel)
 
   // Ollama
+  const ollamaApiKey = ref(DEFAULT_SETTINGS.ollamaApiKey)
   const ollamaBaseUrl = ref(DEFAULT_SETTINGS.ollamaBaseUrl)
   const ollamaModel = ref(DEFAULT_SETTINGS.ollamaModel)
 
@@ -104,6 +107,7 @@ export const useSettingsStore = defineStore('settings', () => {
       anthropicApiKey.value = settings.anthropic_api_key || DEFAULT_SETTINGS.anthropicApiKey
       anthropicBaseUrl.value = settings.anthropic_api_base || DEFAULT_SETTINGS.anthropicBaseUrl
       anthropicModel.value = settings.anthropic_model || DEFAULT_SETTINGS.anthropicModel
+      ollamaApiKey.value = settings.ollama_api_key || DEFAULT_SETTINGS.ollamaApiKey
       ollamaBaseUrl.value = settings.ollama_base_url || DEFAULT_SETTINGS.ollamaBaseUrl
       ollamaModel.value = settings.ollama_model || DEFAULT_SETTINGS.ollamaModel
       temperature.value = settings.temperature ?? DEFAULT_SETTINGS.temperature
@@ -128,6 +132,7 @@ export const useSettingsStore = defineStore('settings', () => {
         anthropic_api_key: anthropicApiKey.value,
         anthropic_api_base: anthropicBaseUrl.value,
         anthropic_model: anthropicModel.value,
+        ollama_api_key: ollamaApiKey.value,
         ollama_base_url: ollamaBaseUrl.value,
         ollama_model: ollamaModel.value,
         temperature: temperature.value,
@@ -154,6 +159,7 @@ export const useSettingsStore = defineStore('settings', () => {
     anthropicApiKey.value = DEFAULT_SETTINGS.anthropicApiKey
     anthropicBaseUrl.value = DEFAULT_SETTINGS.anthropicBaseUrl
     anthropicModel.value = DEFAULT_SETTINGS.anthropicModel
+    ollamaApiKey.value = DEFAULT_SETTINGS.ollamaApiKey
     ollamaBaseUrl.value = DEFAULT_SETTINGS.ollamaBaseUrl
     ollamaModel.value = DEFAULT_SETTINGS.ollamaModel
     temperature.value = DEFAULT_SETTINGS.temperature
@@ -182,6 +188,7 @@ export const useSettingsStore = defineStore('settings', () => {
     anthropicApiKey,
     anthropicBaseUrl,
     anthropicModel,
+    ollamaApiKey,
     ollamaBaseUrl,
     ollamaModel,
     temperature,

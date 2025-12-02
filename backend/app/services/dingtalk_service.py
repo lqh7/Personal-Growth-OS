@@ -51,7 +51,7 @@ class DingTalkService:
         try:
             # Format times
             start_str = task.start_time.strftime('%Y-%m-%d %H:%M') if task.start_time else '未设置'
-            end_str = task.end_time.strftime('%H:%M') if task.end_time else '未设置'
+            end_str = task.end_time.strftime('%Y-%m-%d %H:%M') if task.end_time else '未设置'
             description = task.description or '暂无描述'
 
             # Build beautiful markdown message
@@ -116,7 +116,7 @@ class DingTalkService:
 
         try:
             # Format times
-            start_str = task.start_time.strftime('%H:%M') if task.start_time else '未设置'
+            start_str = task.start_time.strftime('%Y-%m-%d %H:%M') if task.start_time else '未设置'
             end_str = task.end_time.strftime('%Y-%m-%d %H:%M') if task.end_time else '未设置'
 
             # Build beautiful markdown message

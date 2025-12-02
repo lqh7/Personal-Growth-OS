@@ -3,6 +3,7 @@ Settings API endpoints for managing LLM configuration.
 """
 from fastapi import APIRouter, HTTPException
 from typing import Dict
+from datetime import datetime
 import logging
 
 from app.schemas.settings import LLMSettingsRead, LLMSettingsUpdate
@@ -35,6 +36,7 @@ async def get_llm_settings():
             anthropic_api_key=env_settings.get("ANTHROPIC_API_KEY", ""),
             anthropic_api_base=env_settings.get("ANTHROPIC_API_BASE", ""),
             anthropic_model=env_settings.get("ANTHROPIC_MODEL", "claude-3-sonnet-20240229"),
+            ollama_api_key=env_settings.get("OLLAMA_API_KEY", ""),
             ollama_base_url=env_settings.get("OLLAMA_BASE_URL", "http://localhost:11434"),
             ollama_model=env_settings.get("OLLAMA_MODEL", "llama2"),
             temperature=float(env_settings.get("TEMPERATURE", "0.7")),
@@ -87,6 +89,8 @@ async def update_llm_settings(updates: LLMSettingsUpdate):
         if updates.anthropic_model is not None:
             env_updates["ANTHROPIC_MODEL"] = updates.anthropic_model
 
+        if updates.ollama_api_key is not None:
+            env_updates["OLLAMA_API_KEY"] = updates.ollama_api_key
         if updates.ollama_base_url is not None:
             env_updates["OLLAMA_BASE_URL"] = updates.ollama_base_url
         if updates.ollama_model is not None:
@@ -122,16 +126,8 @@ async def update_llm_settings(updates: LLMSettingsUpdate):
                 from app.services.dingtalk_service import reload_dingtalk_service
                 dingtalk = reload_dingtalk_service()  # Reload singleton with new settings
                 logger.info(f"DingTalk config updated: enabled={dingtalk.enabled}, webhook={bool(dingtalk.webhook)}")
-                if dingtalk.enabled:
-                    success = dingtalk.send_text("Personal Growth OS: 配置已保存")
-                    if success:
-                        logger.info("DingTalk test message sent successfully")
-                    else:
-                        logger.warning("Failed to send DingTalk test message")
-                else:
-                    logger.warning("DingTalk is not enabled, skipping test message")
             except Exception as e:
-                logger.error(f"DingTalk test message error: {e}")
+                logger.error(f"DingTalk service reload error: {e}")
 
         # Return updated settings
         return await get_llm_settings()
@@ -158,3 +154,66 @@ async def reload_backend():
         "message": "Settings updated. Please manually restart the backend server for changes to take effect.",
         "command": "cd backend && python -m uvicorn app.main:app --reload"
     }
+
+
+@router.post("/test-dingtalk")
+async def test_dingtalk_notification(request: dict):
+    """
+    Test DingTalk notification configuration.
+
+    发送测试消息验证钉钉webhook配置是否正确。
+
+    Args:
+        request: { "webhook": str, "secret": str }
+
+    Returns:
+        { "success": bool, "error": str }
+    """
+    try:
+        webhook = request.get("webhook", "").strip()
+        secret = request.get("secret", "").strip()
+
+        if not webhook:
+            return {"success": False, "error": "Webhook URL 不能为空"}
+
+        # 临时创建 DingTalkService 实例进行测试（不影响全局单例）
+        from dingtalkchatbot.chatbot import DingtalkChatbot
+
+        # 记录请求参数（隐藏敏感信息）
+        logger.info(f"Testing DingTalk webhook: {webhook[:60]}... (secret={'present' if secret else 'absent'})")
+
+        test_bot = DingtalkChatbot(
+            webhook=webhook,
+            secret=secret if secret else None
+        )
+
+        # 发送测试消息
+        test_message = """🔔 Personal Growth OS 配置测试
+
+这是一条测试消息，用于验证钉钉机器人配置是否正确。
+
+如果您看到此消息，说明配置成功！✅
+
+---
+发送时间：{time}
+""".format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+
+        result = test_bot.send_text(msg=test_message, is_at_all=False)
+
+        # 记录完整API响应
+        logger.info(f"DingTalk API response: {result}")
+
+        if result.get('errcode') == 0:
+            logger.info("DingTalk test message sent successfully")
+            return {"success": True}
+        else:
+            error_msg = result.get('errmsg', '未知错误')
+            errcode = result.get('errcode', 'unknown')
+            # 返回错误码帮助诊断
+            logger.error(f"DingTalk test failed with errcode={errcode}: {error_msg}")
+            return {"success": False, "error": f"钉钉API错误 [code={errcode}]: {error_msg}"}
+
+    except Exception as e:
+        # 记录异常类型
+        logger.error(f"DingTalk test exception: {type(e).__name__}: {e}")
+        return {"success": False, "error": f"请求异常 ({type(e).__name__}): {str(e)}"}

@@ -18,17 +18,48 @@ async def lifespan(app: FastAPI):
     """
     # Startup: Initialize database
     print("Initializing Personal Growth OS...")
-    init_db()
-    print("Database initialized")
+
+    # Try to initialize database (non-critical for settings endpoints)
+    try:
+        init_db()
+        print("Database initialized")
+    except Exception as e:
+        print(f"Warning: Failed to initialize database: {e}")
+        print("Settings endpoints will still work, but other features may be unavailable")
+
+    # Initialize LangGraph PostgreSQL Checkpointer for chat persistence
+    from app.core.langgraph_checkpoint import init_checkpointer
+    try:
+        await init_checkpointer()
+        print("LangGraph Checkpointer initialized")
+    except Exception as e:
+        print(f"Warning: Failed to initialize Checkpointer: {e}")
+        print("Chat history persistence may not work correctly")
 
     # Initialize task reminder scheduler
     from app.core.scheduler import init_scheduler, shutdown_scheduler
-    init_scheduler()
+    try:
+        init_scheduler()
+        print("Task scheduler initialized")
+    except Exception as e:
+        print(f"Warning: Failed to initialize scheduler: {e}")
+        print("Task reminders may not work correctly")
 
     yield
 
     # Shutdown
-    shutdown_scheduler()
+    try:
+        shutdown_scheduler()
+    except:
+        pass
+
+    # Shutdown LangGraph Checkpointer
+    from app.core.langgraph_checkpoint import shutdown_checkpointer
+    try:
+        await shutdown_checkpointer()
+    except:
+        pass
+
     print("Shutting down Personal Growth OS...")
 
 

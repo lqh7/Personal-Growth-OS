@@ -47,13 +47,23 @@
           </el-form-item>
 
           <el-form-item label="Model">
-            <el-input
-              v-model="formData.openaiModel"
-              placeholder="gpt-4, gpt-4o, gpt-3.5-turbo..."
-              clearable
-            />
+            <div style="display: flex; gap: 8px;">
+              <el-input
+                v-model="formData.openaiModel"
+                placeholder="gpt-4, gpt-4o, gpt-3.5-turbo..."
+                clearable
+                style="flex: 1;"
+              />
+              <el-button
+                @click="handleTestLLM"
+                :loading="testingLLM"
+                :disabled="testingLLM"
+              >
+                {{ testingLLM ? '测试中...' : '🔍 测试连接' }}
+              </el-button>
+            </div>
             <span class="form-hint">
-              常用模型: gpt-4, gpt-4o, gpt-4-turbo, gpt-3.5-turbo
+              常用模型: gpt-4, gpt-4o, gpt-4-turbo, gpt-3.5-turbo,gpt-4.1-mini
             </span>
           </el-form-item>
         </div>
@@ -85,11 +95,21 @@
           </el-form-item>
 
           <el-form-item label="Model">
-            <el-input
-              v-model="formData.anthropicModel"
-              placeholder="claude-3-5-sonnet-20240620, claude-3-opus..."
-              clearable
-            />
+            <div style="display: flex; gap: 8px;">
+              <el-input
+                v-model="formData.anthropicModel"
+                placeholder="claude-3-5-sonnet-20240620, claude-3-opus..."
+                clearable
+                style="flex: 1;"
+              />
+              <el-button
+                @click="handleTestLLM"
+                :loading="testingLLM"
+                :disabled="testingLLM"
+              >
+                {{ testingLLM ? '测试中...' : '🔍 测试连接' }}
+              </el-button>
+            </div>
             <span class="form-hint">
               常用模型: claude-3-5-sonnet-20240620, claude-3-opus-20240229, claude-3-sonnet-20240229
             </span>
@@ -99,6 +119,17 @@
         <!-- Ollama Settings -->
         <div v-if="formData.llmProvider === 'ollama'" class="provider-section">
           <h3 class="section-title">Ollama 配置</h3>
+
+          <el-form-item label="API Key (可选)">
+            <el-input
+              v-model="formData.ollamaApiKey"
+              type="password"
+              placeholder="可选，某些 Ollama 部署需要"
+              show-password
+              clearable
+            />
+            <span class="form-hint">如果 Ollama 服务启用了认证，请填写 API Key</span>
+          </el-form-item>
 
           <el-form-item label="Base URL">
             <el-input
@@ -110,12 +141,22 @@
           </el-form-item>
 
           <el-form-item label="Model">
-            <el-input
-              v-model="formData.ollamaModel"
-              placeholder="llama2, mistral, ..."
-              clearable
-            />
-            <span class="form-hint">已安装的 Ollama 模型名称</span>
+            <div style="display: flex; gap: 8px;">
+              <el-input
+                v-model="formData.ollamaModel"
+                placeholder="llama2, mistral, ..."
+                clearable
+                style="flex: 1;"
+              />
+              <el-button
+                @click="handleTestLLM"
+                :loading="testingLLM"
+                :disabled="testingLLM"
+              >
+                {{ testingLLM ? '测试中...' : '🔍 测试连接' }}
+              </el-button>
+            </div>
+            <!-- <span class="form-hint">已安装的 Ollama 模型名称</span> -->
           </el-form-item>
         </div>
 
@@ -181,14 +222,24 @@
           </el-form-item>
 
           <el-form-item label="加签密钥 (可选)">
-            <el-input
-              v-model="formData.dingtalkSecret"
-              type="password"
-              placeholder="SEC..."
-              show-password
-              clearable
-              :disabled="!formData.enableTaskReminder"
-            />
+            <div style="display: flex; gap: 8px;">
+              <el-input
+                v-model="formData.dingtalkSecret"
+                type="password"
+                placeholder="SEC..."
+                show-password
+                clearable
+                :disabled="!formData.enableTaskReminder"
+                style="flex: 1;"
+              />
+              <el-button
+                @click="handleTestDingTalk"
+                :loading="testingDingTalk"
+                :disabled="!formData.enableTaskReminder || testingDingTalk"
+              >
+                {{ testingDingTalk ? '发送中...' : '📱 测试通知' }}
+              </el-button>
+            </div>
             <span class="form-hint">
               如果钉钉机器人启用了"加签"安全设置,请填写此密钥
             </span>
@@ -208,6 +259,7 @@
         </template>
         <ul style="margin: 8px 0 0 0; padding-left: 20px">
           <li>配置会保存到后端 <code>.env</code> 文件</li>
+          <li>点击"测试连接"/"测试通知"验证配置是否正确</li>
           <li>修改配置后会立即生效，无需重启服务</li>
           <li>API Key 敏感信息，请妥善保管</li>
         </ul>
@@ -217,7 +269,7 @@
       <div class="actions-bar">
         <el-button @click="handleReset">重置为默认值</el-button>
         <el-button type="primary" :loading="saving" @click="handleSave">
-          保存配置
+          {{ saving ? '保存中...' : '💾 保存配置' }}
         </el-button>
       </div>
     </div>
@@ -229,6 +281,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { storeToRefs } from 'pinia'
+import { validateLLMConfig } from '@/utils/llmValidator'
 
 // ============================================================================
 // Store
@@ -242,6 +295,7 @@ const {
   anthropicApiKey,
   anthropicBaseUrl,
   anthropicModel,
+  ollamaApiKey,
   ollamaBaseUrl,
   ollamaModel,
   temperature,
@@ -251,6 +305,8 @@ const {
 // State
 // ============================================================================
 const saving = ref(false)
+const testingLLM = ref(false)
+const testingDingTalk = ref(false)
 
 // Form data (copy from store)
 const formData = reactive({
@@ -261,6 +317,7 @@ const formData = reactive({
   anthropicApiKey: anthropicApiKey.value,
   anthropicBaseUrl: anthropicBaseUrl.value,
   anthropicModel: anthropicModel.value,
+  ollamaApiKey: ollamaApiKey.value,
   ollamaBaseUrl: ollamaBaseUrl.value,
   ollamaModel: ollamaModel.value,
   temperature: temperature.value,
@@ -285,6 +342,7 @@ onMounted(async () => {
   formData.anthropicApiKey = anthropicApiKey.value
   formData.anthropicBaseUrl = anthropicBaseUrl.value
   formData.anthropicModel = anthropicModel.value
+  formData.ollamaApiKey = ollamaApiKey.value
   formData.ollamaBaseUrl = ollamaBaseUrl.value
   formData.ollamaModel = ollamaModel.value
   formData.temperature = temperature.value
@@ -308,58 +366,144 @@ async function handleSave() {
   saving.value = true
 
   try {
-    console.log('[SettingsView] handleSave() called with formData:', formData)
+    console.log('[SettingsView] Starting save...')
 
-    // Update store from form data
-    llmProvider.value = formData.llmProvider
-    openaiApiKey.value = formData.openaiApiKey
-    openaiBaseUrl.value = formData.openaiBaseUrl
-    openaiModel.value = formData.openaiModel
-    anthropicApiKey.value = formData.anthropicApiKey
-    anthropicBaseUrl.value = formData.anthropicBaseUrl
-    anthropicModel.value = formData.anthropicModel
-    ollamaBaseUrl.value = formData.ollamaBaseUrl
-    ollamaModel.value = formData.ollamaModel
-    temperature.value = formData.temperature
-
-    console.log('[SettingsView] Calling settingsStore.saveSettings()...')
-
-    // Save to backend (including DingTalk settings)
-    const saveData = {
-      llm_provider: formData.llmProvider,
-      openai_api_key: formData.openaiApiKey,
-      openai_api_base: formData.openaiBaseUrl,
-      openai_model: formData.openaiModel,
-      anthropic_api_key: formData.anthropicApiKey,
-      anthropic_api_base: formData.anthropicBaseUrl,
-      anthropic_model: formData.anthropicModel,
-      ollama_base_url: formData.ollamaBaseUrl,
-      ollama_model: formData.ollamaModel,
-      temperature: formData.temperature,
+    // 构建保存数据 - 只包含当前选中的provider
+    const saveData: any = {
+      llm_provider: formData.llmProvider,  // 必须发送（决定LangGraph使用哪个LLM）
+      temperature: formData.temperature,    // 通用配置
       dingtalk_webhook: formData.dingtalkWebhook,
       dingtalk_secret: formData.dingtalkSecret,
       enable_task_reminder: formData.enableTaskReminder,
     }
+
+    // 根据选中的provider，只发送对应配置
+    // 未发送的配置会保留在.env中不被覆盖
+    if (formData.llmProvider === 'openai') {
+      saveData.openai_api_key = formData.openaiApiKey
+      saveData.openai_api_base = formData.openaiBaseUrl
+      saveData.openai_model = formData.openaiModel
+      // 不发送 Claude 和 Ollama 的配置 → 后端不更新它们
+    } else if (formData.llmProvider === 'claude') {
+      saveData.anthropic_api_key = formData.anthropicApiKey
+      saveData.anthropic_api_base = formData.anthropicBaseUrl
+      saveData.anthropic_model = formData.anthropicModel
+      // 不发送 OpenAI 和 Ollama 的配置
+    } else if (formData.llmProvider === 'ollama') {
+      saveData.ollama_api_key = formData.ollamaApiKey
+      saveData.ollama_base_url = formData.ollamaBaseUrl
+      saveData.ollama_model = formData.ollamaModel
+      // 不发送 OpenAI 和 Claude 的配置
+    }
+
+    console.log('[SettingsView] Save data:', saveData)
 
     const response = await fetch('http://localhost:8000/api/settings/', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(saveData)
     })
-    const result = { success: response.ok }
 
-    console.log('[SettingsView] saveSettings() result:', result)
+    console.log('[SettingsView] API response:', response.ok)
 
-    if (result.success) {
-      ElMessage.success('配置保存成功！已立即生效。')
+    if (response.ok) {
+      ElMessage.success(`配置保存成功！当前使用: ${formData.llmProvider.toUpperCase()}`)
     } else {
-      ElMessage.error('配置保存失败，请检查后端服务是否正常运行')
+      ElMessage.error('保存失败，请检查后端服务')
     }
   } catch (error) {
     console.error('[SettingsView] Save error:', error)
     ElMessage.error('配置保存失败')
   } finally {
     saving.value = false
+  }
+}
+
+/**
+ * Test LLM connection
+ */
+async function handleTestLLM() {
+  testingLLM.value = true
+
+  try {
+    // 使用表单当前值进行测试（不保存）
+    const result = await validateLLMConfig(formData.llmProvider, {
+      openaiApiKey: formData.openaiApiKey,
+      openaiModel: formData.openaiModel,
+      openaiBaseUrl: formData.openaiBaseUrl,
+      anthropicApiKey: formData.anthropicApiKey,
+      anthropicModel: formData.anthropicModel,
+      anthropicBaseUrl: formData.anthropicBaseUrl,
+      ollamaApiKey: formData.ollamaApiKey,
+      ollamaModel: formData.ollamaModel,
+      ollamaBaseUrl: formData.ollamaBaseUrl,
+    })
+
+    if (result.valid) {
+      ElMessage.success({
+        message: `✅ 连接成功！已测试模型: ${result.modelTested}`,
+        duration: 3000
+      })
+    } else {
+      ElMessage.error({
+        message: `❌ 连接失败: ${result.errorMessage}`,
+        duration: 5000
+      })
+    }
+  } catch (error) {
+    console.error('[SettingsView] Test LLM error:', error)
+    ElMessage.error('测试请求失败')
+  } finally {
+    testingLLM.value = false
+  }
+}
+
+/**
+ * Test DingTalk notification
+ */
+async function handleTestDingTalk() {
+  // 前端验证：必须启用且填写webhook
+  if (!formData.enableTaskReminder) {
+    ElMessage.warning('请先启用任务提醒')
+    return
+  }
+
+  if (!formData.dingtalkWebhook) {
+    ElMessage.warning('请先填写 Webhook URL')
+    return
+  }
+
+  testingDingTalk.value = true
+
+  try {
+    // 调用后端新增的测试API
+    const response = await fetch('http://localhost:8000/api/settings/test-dingtalk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        webhook: formData.dingtalkWebhook,
+        secret: formData.dingtalkSecret || ''
+      })
+    })
+
+    const result = await response.json()
+
+    if (response.ok && result.success) {
+      ElMessage.success({
+        message: '📱 测试消息已发送，请在钉钉群查看',
+        duration: 3000
+      })
+    } else {
+      ElMessage.error({
+        message: `❌ 发送失败: ${result.error || '未知错误'}`,
+        duration: 5000
+      })
+    }
+  } catch (error) {
+    console.error('[SettingsView] Test DingTalk error:', error)
+    ElMessage.error('测试请求失败')
+  } finally {
+    testingDingTalk.value = false
   }
 }
 
@@ -388,6 +532,7 @@ async function handleReset() {
     formData.anthropicApiKey = anthropicApiKey.value
     formData.anthropicBaseUrl = anthropicBaseUrl.value
     formData.anthropicModel = anthropicModel.value
+    formData.ollamaApiKey = ollamaApiKey.value
     formData.ollamaBaseUrl = ollamaBaseUrl.value
     formData.ollamaModel = ollamaModel.value
     formData.temperature = temperature.value

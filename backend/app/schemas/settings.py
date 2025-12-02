@@ -22,6 +22,7 @@ class LLMSettingsRead(BaseModel):
     anthropic_model: Optional[str] = Field(None, description="Anthropic Model Name")
 
     # Ollama settings
+    ollama_api_key: Optional[str] = Field(None, description="Ollama API Key (optional)")
     ollama_base_url: Optional[str] = Field(None, description="Ollama Base URL")
     ollama_model: Optional[str] = Field(None, description="Ollama Model Name")
 
@@ -62,6 +63,7 @@ class LLMSettingsUpdate(BaseModel):
     anthropic_model: Optional[str] = Field(None, description="Anthropic Model Name")
 
     # Ollama settings
+    ollama_api_key: Optional[str] = Field(None, description="Ollama API Key (optional)")
     ollama_base_url: Optional[str] = Field(None, description="Ollama Base URL")
     ollama_model: Optional[str] = Field(None, description="Ollama Model Name")
 

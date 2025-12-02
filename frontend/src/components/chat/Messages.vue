@@ -132,28 +132,30 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600&family=Inter:wght@400&display=swap');
+
 .messages-container {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
-  background: #ffffff;
+  background: #FFFFFF;
 
-  // Custom scrollbar
+  // Minimal custom scrollbar
   &::-webkit-scrollbar {
-    width: 6px;
+    width: 4px;
   }
 
   &::-webkit-scrollbar-track {
-    background: #f5f7fa;
+    background: transparent;
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #dcdfe6;
-    border-radius: 3px;
+    background: #D6D3D1;
+    border-radius: 2px;
 
     &:hover {
-      background: #c0c4cc;
+      background: #A8A29E;
     }
   }
 }
@@ -163,37 +165,81 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  padding: 40px;
+  padding: 80px 48px;
 
-  .hint-text {
-    margin-top: 8px;
-    font-size: 13px;
-    color: #909399;
+  :deep(.el-empty) {
+    .el-empty__image {
+      margin-bottom: 32px;
+
+      .el-icon {
+        color: #D6D3D1 !important;
+        opacity: 0.4;
+        animation: float 4s ease-in-out infinite;
+      }
+    }
+
+    .el-empty__description {
+      p {
+        font-family: 'Inter', sans-serif;
+        font-size: 15px;
+        line-height: 1.6;
+        color: #78716C;
+        margin: 8px 0;
+
+        &:first-child {
+          font-family: 'Crimson Pro', serif;
+          font-size: 18px;
+          font-weight: 600;
+          color: #2D2D2D;
+          letter-spacing: -0.02em;
+          margin-bottom: 12px;
+        }
+      }
+
+      .hint-text {
+        margin-top: 16px;
+        font-size: 13px;
+        color: #A8A29E;
+        font-style: italic;
+      }
+    }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
   }
 }
 
 .messages-list {
   display: flex;
   flex-direction: column;
+  padding: 24px 0;
 }
 
 .loading-indicator {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px;
-  color: #909399;
+  gap: 16px;
+  padding: 32px 48px;
+  color: #78716C;
+  opacity: 0;
+  animation: fadeIn 0.4s ease-out forwards;
+
+  @keyframes fadeIn {
+    to { opacity: 1; }
+  }
 
   .loading-dots {
     display: flex;
-    gap: 4px;
+    gap: 6px;
 
     .dot {
-      width: 8px;
-      height: 8px;
-      background-color: #409eff;
+      width: 6px;
+      height: 6px;
+      background: linear-gradient(135deg, #8B7355 0%, #A8A29E 100%);
       border-radius: 50%;
-      animation: bounce 1.4s infinite ease-in-out both;
+      animation: gentlePulse 1.6s infinite ease-in-out both;
 
       &:nth-child(1) {
         animation-delay: -0.32s;
@@ -206,45 +252,60 @@ onUnmounted(() => {
   }
 
   .loading-text {
-    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
     font-style: italic;
+    letter-spacing: 0.01em;
   }
 }
 
-@keyframes bounce {
-  0%,
-  80%,
-  100% {
-    transform: scale(0);
+@keyframes gentlePulse {
+  0%, 80%, 100% {
+    transform: scale(0.3);
+    opacity: 0.3;
   }
   40% {
     transform: scale(1);
+    opacity: 1;
   }
 }
 
 .scroll-to-bottom {
   position: absolute;
-  bottom: 20px;
-  right: 20px;
+  bottom: 32px;
+  right: 32px;
   z-index: 10;
 
-  .el-button {
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  :deep(.el-button) {
+    background: #FFFFFF;
+    border: 1.5px solid #E7E5E4;
+    color: #57534E;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
     &:hover {
+      background: #FAFAF9;
+      border-color: #8B7355;
+      color: #2D2D2D;
       transform: translateY(-2px);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    &:active {
+      transform: translateY(-1px);
     }
   }
 }
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.3s;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+  transform: translateY(8px);
 }
 </style>
