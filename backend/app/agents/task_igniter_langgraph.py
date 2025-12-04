@@ -8,27 +8,45 @@ This agent provides task decomposition capabilities:
 3. Minimum viable task identification
 
 Migration from Agno to LangGraph 1.0 (2025-12-01)
+Updated 2025-12-03: Use create_react_agent for proper streaming support
 """
 
-from typing import TypedDict, Annotated, Sequence, Optional
-from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
-from langgraph.graph import StateGraph, END
-from langgraph.graph.message import add_messages
+from typing import Optional, Any
+from langchain_core.messages import HumanMessage
 
 from app.core.config import settings
 
 
 # ============================================================================
-# State Definition
+# System Prompt
 # ============================================================================
 
-class AgentState(TypedDict):
-    """
-    Agent state for task decomposition.
+SYSTEM_PROMPT = """你是 Personal Growth OS 的 AI 助手，专注于帮助用户提升效率和个人成长。
 
-    Uses LangGraph's message-based state management with automatic message merging.
-    """
-    messages: Annotated[Sequence[BaseMessage], add_messages]
+你的主要能力：
+1. **任务分解**: 当用户描述一个任务或目标时，帮助分解为可执行的子任务
+2. **日常对话**: 友好地回应用户的问候和闲聊
+3. **问题解答**: 回答关于任务管理、时间规划等问题
+
+判断规则：
+- 如果用户输入是问候（如"你好"、"hi"、"hello"等），友好地回应并询问如何帮助
+- 如果用户描述了一个具体任务或目标，进行任务分解
+- 如果不确定用户意图，礼貌地询问
+
+任务分解格式（仅在需要时使用）：
+📝 **主任务标题**
+📋 主任务描述
+
+🔹 **子任务列表**
+1. 子任务标题 - 描述（优先级：高/中/低）⭐最小可行任务
+2. 子任务标题 - 描述（优先级：高/中/低）
+...
+
+分解原则：
+- 每个子任务具体、可执行、有明确完成标准
+- 第一个子任务应最容易开始（降低启动摩擦）
+- 3-5个子任务为宜
+"""
 
 
 # ============================================================================
@@ -40,139 +58,68 @@ def create_llm():
     Create LLM instance based on settings.LLM_PROVIDER.
 
     Supports:
-    - openai: ChatOpenAI
+    - openai: ChatOpenAI (with JWT token support)
     - claude: ChatAnthropic
     - ollama: ChatOllama
 
     Returns:
         LangChain ChatModel instance with streaming enabled
+
+    Note:
+        For OpenAI provider, automatically detects JWT tokens and uses
+        Authorization header for proxy services (e.g., TrendMicro).
     """
-    provider = settings.LLM_PROVIDER
-
-    if provider == "openai":
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(
-            model=settings.OPENAI_MODEL,
-            api_key=settings.OPENAI_API_KEY,
-            base_url=getattr(settings, "OPENAI_API_BASE", None),
-            streaming=True,
-            temperature=0.7,
-        )
-
-    elif provider == "claude":
-        from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(
-            model=settings.ANTHROPIC_MODEL,
-            api_key=settings.ANTHROPIC_API_KEY,
-            base_url=getattr(settings, "ANTHROPIC_API_BASE", None) if getattr(settings, "ANTHROPIC_API_BASE", None) else None,
-            streaming=True,
-            temperature=0.7,
-        )
-
-    elif provider == "ollama":
-        from langchain_community.chat_models import ChatOllama
-        return ChatOllama(
-            model=settings.OLLAMA_MODEL,
-            base_url=settings.OLLAMA_BASE_URL,
-            temperature=0.7,
-        )
-
-    else:
-        # Fallback to OpenAI
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(
-            model=settings.OPENAI_MODEL,
-            api_key=settings.OPENAI_API_KEY,
-            streaming=True,
-            temperature=0.7,
-        )
+    # Use centralized utility function with JWT auth support
+    from app.core.llm_utils import get_langchain_llm_with_auth
+    return get_langchain_llm_with_auth()
 
 
 # ============================================================================
-# Graph Nodes
-# ============================================================================
-
-def agent_node(state: AgentState) -> dict:
-    """
-    LLM reasoning node.
-
-    Invokes the LLM with current conversation state and returns response.
-
-    Args:
-        state: Current agent state with message history
-
-    Returns:
-        Updated state with LLM response appended to messages
-    """
-    llm = create_llm()
-    response = llm.invoke(state["messages"])
-    return {"messages": [response]}
-
-
-# ============================================================================
-# Graph Construction
+# Graph Construction using create_react_agent
 # ============================================================================
 
 def create_task_igniter_graph():
     """
-    Create task igniter StateGraph using LangGraph 1.0 with PostgreSQL persistence.
+    Create task igniter agent using LangGraph 1.0's create_react_agent.
 
-    Graph structure:
-    - Entry: agent_node (LLM reasoning)
-    - Exit: END
+    Uses create_react_agent for proper streaming support with astream_events.
+    The agent uses a system prompt for task decomposition guidance.
 
     Persistence:
     - Uses PostgreSQL Checkpointer to save conversation history
     - Automatically loads previous messages when using the same thread_id
 
     Returns:
-        Compiled StateGraph with checkpointer attached
+        Compiled agent graph with checkpointer attached
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     # Import checkpointer (lazy import to avoid circular dependencies)
     from app.core.langgraph_checkpoint import get_checkpointer
+    from langgraph.prebuilt import create_react_agent
 
-    # System prompt (保持与 Agno 版本一致)
-    system_prompt = """你是一个任务分解专家助手，帮助用户将模糊的大任务分解为清晰的可执行子任务。
+    # Create LLM with streaming enabled
+    llm = create_llm()
+    logger.info(f"Created LLM: {llm.model_name}, streaming={llm.streaming}")
 
-你的工作流程：
-1. 分析用户输入，提炼出主任务的标题和描述
-2. 将主任务分解为3-5个具体可执行的子任务
-3. 识别最容易开始的"最小可行任务"(Minimum Viable Task)
-
-分解原则：
-- 每个子任务要具体、可执行、有明确的完成标准
-- 第一个子任务应该是最容易开始的（降低启动摩擦）
-- 按逻辑顺序排列子任务
-- 每个子任务标题15-30字，描述50字以内
-
-输出格式：
-使用清晰的Markdown格式输出分解结果，包含：
-- 📝 主任务标题
-- 📋 主任务描述
-- 🔹 子任务列表（编号 + 标题 + 描述 + 优先级）
-- ⭐ 标记最小可行任务（第一步最容易开始的）
-"""
-
-    # Create StateGraph
-    workflow = StateGraph(AgentState)
-
-    # Add nodes
-    workflow.add_node("agent", agent_node)
-
-    # Define edges
-    workflow.set_entry_point("agent")
-    workflow.add_edge("agent", END)
-
-    # ⭐ Compile graph with checkpointer for persistence
+    # ⭐ Use create_react_agent for proper streaming support
+    # No tools needed for simple task decomposition
     checkpointer = get_checkpointer()
-    if checkpointer:
-        graph = workflow.compile(checkpointer=checkpointer)
-    else:
-        # Fallback: compile without checkpointer (in-memory only)
-        graph = workflow.compile()
+    logger.info(f"Got checkpointer: {checkpointer is not None}")
 
-    # Store system prompt as graph metadata for later use
-    graph.system_prompt = system_prompt
+    # Create agent with system prompt (LangGraph 1.0.3 API)
+    graph = create_react_agent(
+        model=llm,
+        tools=[],  # No tools for basic task decomposition
+        checkpointer=checkpointer,
+        prompt=SYSTEM_PROMPT,  # Pass as string, not SystemMessage
+    )
+
+    logger.info(f"Created react agent, graph type: {type(graph).__name__}")
+
+    # Store system prompt as graph metadata for compatibility
+    graph.system_prompt = SYSTEM_PROMPT
 
     return graph
 
@@ -181,7 +128,7 @@ def create_task_igniter_graph():
 # Public API - Global Instance
 # ============================================================================
 
-_graph_instance: Optional[StateGraph] = None
+_graph_instance: Optional[Any] = None
 
 
 def get_task_igniter_agent():
@@ -191,7 +138,7 @@ def get_task_igniter_agent():
     Lazy initialization pattern for efficiency.
 
     Returns:
-        Compiled StateGraph instance
+        Compiled agent graph instance
     """
     global _graph_instance
     if _graph_instance is None:
@@ -218,15 +165,11 @@ async def decompose_task_async(user_input: str, project_id: Optional[int] = None
     """
     graph = get_task_igniter_agent()
 
-    # Prepare messages
-    system_prompt = graph.system_prompt
+    # Prepare messages (system prompt is already in state_modifier)
     context = f"项目ID: {project_id}\n\n" if project_id else ""
     user_message = f"{context}{user_input}"
 
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=user_message)
-    ]
+    messages = [HumanMessage(content=user_message)]
 
     # Invoke graph (non-streaming for simple response)
     result = await graph.ainvoke({"messages": messages})

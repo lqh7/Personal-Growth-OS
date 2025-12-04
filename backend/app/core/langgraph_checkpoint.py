@@ -37,13 +37,17 @@ async def init_checkpointer() -> AsyncPostgresSaver:
         try:
             logger.info("初始化 LangGraph PostgreSQL Checkpointer (Async)...")
 
-            # 创建异步连接池 (持久化连接)
+            # 创建异步连接池 (不自动打开，手动调用open)
             _pool = AsyncConnectionPool(
                 conninfo=settings.DATABASE_URL,
                 max_size=10,
                 min_size=2,
                 timeout=30,
+                open=False,  # 不自动打开，避免警告
             )
+
+            # 手动打开连接池
+            await _pool.open()
 
             # 使用连接池创建 AsyncPostgresSaver
             _checkpointer = AsyncPostgresSaver(_pool)

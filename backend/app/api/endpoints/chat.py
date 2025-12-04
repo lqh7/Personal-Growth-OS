@@ -9,12 +9,16 @@ Uses LangGraph 1.0 framework for AI agents.
 from typing import Optional, AsyncIterator
 import json
 import time
-from fastapi import APIRouter, Form, HTTPException, Request
+import logging
+from fastapi import APIRouter, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from sse_starlette.sse import EventSourceResponse
 from langchain_core.messages import SystemMessage, HumanMessage
 
+logger = logging.getLogger(__name__)
+
 from app.agents.task_igniter_langgraph import get_task_igniter_agent
+from app.agents.deep_researcher import create_deep_task_researcher
 from app.schemas.chat import (
     RunResponseContent,
     RunEvent,
@@ -32,6 +36,7 @@ router = APIRouter()
 # ============================================================================
 
 async def stream_agent_run(
+    agent_id: str,
     message: str,
     stream: bool,
     user_id: Optional[str],
@@ -49,6 +54,7 @@ async def stream_agent_run(
     - All messages are saved after each run
 
     Args:
+        agent_id: The ID of the agent to run (task-igniter or deep-task-researcher)
         message: User input message
         stream: Whether to stream the response
         user_id: Optional user identifier
@@ -74,18 +80,25 @@ async def stream_agent_run(
     # Generate thread_id if not provided (this acts as session_id)
     thread_id = session_id or f"thread_{uuid.uuid4().hex[:16]}"
 
-    # Get LangGraph instance
-    graph = get_task_igniter_agent()
-    system_prompt = graph.system_prompt
+    # ⭐ 使用新的 Deep Task Researcher
+    # 用户可以通过 agent_id 选择使用旧版或新版
+    use_deep_researcher = (agent_id == "deep-task-researcher")
+
+    if use_deep_researcher:
+        # 使用新的 Deep Task Researcher（三层架构）
+        graph = create_deep_task_researcher()
+    else:
+        # Task Igniter (使用 create_react_agent，支持 streaming)
+        graph = get_task_igniter_agent()
 
     # Prepare messages for THIS turn (not history - LangGraph handles that)
+    # Note: create_react_agent uses state_modifier for system prompt,
+    # so we only need to pass the user message
     context = f"项目ID: {project_id}\n\n" if project_id else ""
     user_message = f"{context}{message}"
 
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=user_message)
-    ]
+    # Both agents now use the same message format
+    messages = [HumanMessage(content=user_message)]
 
     # ⭐ Config for LangGraph persistence
     config = {
@@ -105,27 +118,85 @@ async def stream_agent_run(
 
         if stream:
             # ⭐ Stream using LangGraph with config for persistence
-            async for event in graph.astream_events(
-                {"messages": messages},
-                config=config,  # Pass config to enable checkpointing
-                version="v2"
-            ):
-                # Handle on_chat_model_stream events (LLM token streaming)
-                if event["event"] == "on_chat_model_stream":
-                    chunk = event["data"]["chunk"]
-                    if hasattr(chunk, "content") and chunk.content:
+            if use_deep_researcher:
+                # Deep Researcher 使用完整的 state 结构
+                input_state = {
+                    "messages": messages,
+                    "needs_clarification": False,
+                    "research_brief": None,
+                    "supervisor_messages": [],
+                    "notes": [],
+                    "final_output": None
+                }
+            else:
+                # Task Igniter (create_react_agent) 只需要 messages
+                input_state = {"messages": messages}
+
+            # ⭐ LangGraph 1.0: Use astream with stream_mode="messages" for token streaming
+            chunk_count = 0
+            logger.info(f"Starting astream with input_state keys: {input_state.keys()}")
+            logger.info(f"Config: {config}")
+
+            try:
+                async for message, metadata in graph.astream(
+                    input_state,
+                    config=config,
+                    stream_mode="messages"
+                ):
+                    chunk_count += 1
+                    msg_type = getattr(message, "type", type(message).__name__)
+                    msg_content = getattr(message, "content", None)
+                    logger.info(f"Stream chunk {chunk_count}: type={msg_type}, content={repr(msg_content)[:50] if msg_content else None}")
+
+                    # Handle message chunks (LLM token streaming)
+                    # AIMessageChunk has type="AIMessageChunk" (string)
+                    if msg_type == "AIMessageChunk" and msg_content:
+                        logger.info(f"Yielding RunContent with content: {repr(msg_content)[:30]}")
                         yield _format_sse_chunk(RunResponseContent(
                             event=RunEvent.RUN_CONTENT,
-                            content=chunk.content,
+                            content=msg_content,
                             content_type="text",
                             session_id=thread_id,
                             created_at=_get_timestamp(),
                         ))
 
+                    # Handle tool calls if present
+                    if hasattr(message, "tool_calls") and message.tool_calls:
+                        for tool_call in message.tool_calls:
+                            yield _format_sse_chunk(RunResponseContent(
+                                event=RunEvent.TOOL_CALL_STARTED,
+                                content_type="tool",
+                                event_data={
+                                    "tool_name": tool_call.get("name", "unknown"),
+                                    "tool_args": tool_call.get("args", {}),
+                                },
+                                session_id=thread_id,
+                                created_at=_get_timestamp(),
+                            ))
+
+                logger.info(f"Streaming completed with {chunk_count} chunks")
+
+            except Exception as stream_error:
+                logger.error(f"Error during streaming: {stream_error}", exc_info=True)
+                raise
+
         else:
             # ⭐ Non-streaming response with config
+            if use_deep_researcher:
+                input_state = {
+                    "messages": messages,
+                    "needs_clarification": False,
+                    "research_brief": None,
+                    "supervisor_messages": [],
+                    "notes": [],
+                    "final_output": None
+                }
+            else:
+                # Task Igniter (create_react_agent) 只需要 messages
+                input_state = {"messages": messages}
+
             result = await graph.ainvoke(
-                {"messages": messages},
+                input_state,
                 config=config  # Pass config to enable checkpointing
             )
 
@@ -152,8 +223,6 @@ async def stream_agent_run(
 
     except Exception as e:
         # Send error event
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Agent streaming error: {str(e)}", exc_info=True)
 
         yield _format_sse_chunk(RunResponseContent(
@@ -202,7 +271,9 @@ async def run_agent(
     Uses LangGraph 1.0 framework for AI agents.
 
     Args:
-        agent_id: The ID of the agent to run (e.g., "task-igniter")
+        agent_id: The ID of the agent to run
+                  - "task-igniter": 旧版任务分解 (单层架构)
+                  - "deep-task-researcher": 新版深度任务研究 (三层架构)
         message: User input message
         stream: Whether to stream the response (default: True)
         user_id: Optional user identifier
@@ -214,7 +285,7 @@ async def run_agent(
 
     Example cURL:
         ```bash
-        curl --location 'http://localhost:8000/api/chat/agents/task-igniter/runs' \
+        curl --location 'http://localhost:8000/api/chat/agents/deep-task-researcher/runs' \
             --header 'Content-Type: application/x-www-form-urlencoded' \
             --data-urlencode 'message=准备项目演示PPT' \
             --data-urlencode 'stream=True' \
@@ -223,16 +294,17 @@ async def run_agent(
             --data-urlencode 'dependencies={"task_id": 1}'
         ```
     """
-    # Validate agent_id (currently only task-igniter supported)
-    if agent_id not in ["task-igniter"]:
+    # Validate agent_id
+    if agent_id not in ["task-igniter", "deep-task-researcher"]:
         raise HTTPException(
             status_code=404,
-            detail=f"Agent '{agent_id}' not found. Available agents: task-igniter"
+            detail=f"Agent '{agent_id}' not found. Available agents: task-igniter, deep-task-researcher"
         )
 
     # Return streaming response
     return StreamingResponse(
         stream_agent_run(
+            agent_id=agent_id,
             message=message,
             stream=stream,
             user_id=user_id,
@@ -271,9 +343,7 @@ async def get_sessions(
         List of sessions with pagination metadata
     """
     from app.core.langgraph_checkpoint import get_checkpointer
-    import logging
 
-    logger = logging.getLogger(__name__)
     checkpointer = get_checkpointer()
 
     if not checkpointer:
@@ -281,8 +351,10 @@ async def get_sessions(
         return SessionList(sessions=[], total=0, page=1, page_size=limit)
 
     try:
-        # ⭐ List all checkpoints from LangGraph
-        checkpoints = list(checkpointer.list({}))
+        # ⭐ List all checkpoints from LangGraph (async)
+        checkpoints = []
+        async for cp in checkpointer.alist({}):
+            checkpoints.append(cp)
 
         # Group by thread_id to get unique sessions
         thread_map = {}
@@ -316,8 +388,8 @@ async def get_sessions(
                 ts = checkpoint_tuple.checkpoint.get("ts")
                 if isinstance(ts, str):
                     # If ts is ISO timestamp string, convert to milliseconds
-                    from datetime.datetime import fromisoformat
-                    ts = int(fromisoformat(ts).timestamp() * 1000)
+                    from datetime import datetime as dt
+                    ts = int(dt.fromisoformat(ts).timestamp() * 1000)
                 elif not isinstance(ts, int):
                     ts = int(time.time() * 1000)
 
@@ -364,9 +436,7 @@ async def get_session_history(session_id: str):
         Session with full message history
     """
     from app.core.langgraph_checkpoint import get_checkpointer
-    import logging
 
-    logger = logging.getLogger(__name__)
     checkpointer = get_checkpointer()
 
     if not checkpointer:
@@ -376,9 +446,9 @@ async def get_session_history(session_id: str):
         )
 
     try:
-        # ⭐ Use checkpointer.get_tuple() to get specific thread's latest state
+        # ⭐ Use checkpointer.aget_tuple() to get specific thread's latest state (async)
         config = {"configurable": {"thread_id": session_id}}
-        checkpoint_tuple = checkpointer.get_tuple(config)
+        checkpoint_tuple = await checkpointer.aget_tuple(config)
 
         if not checkpoint_tuple:
             raise HTTPException(
@@ -434,6 +504,7 @@ async def delete_session(session_id: str):
     Delete a session and its message history using LangGraph Checkpointer.
 
     This deletes all checkpoints associated with the given thread_id from PostgreSQL.
+    LangGraph uses multiple tables: checkpoints, checkpoint_blobs, checkpoint_writes.
 
     Args:
         session_id: Session identifier (thread_id)
@@ -441,56 +512,67 @@ async def delete_session(session_id: str):
     Returns:
         Success response
     """
-    from app.core.langgraph_checkpoint import get_checkpointer
-    from app.db.database import get_db
-    import logging
+    from app.core.langgraph_checkpoint import _pool
 
-    logger = logging.getLogger(__name__)
-    checkpointer = get_checkpointer()
-
-    if not checkpointer:
+    if _pool is None:
         raise HTTPException(
             status_code=503,
-            detail="Checkpointer not initialized"
+            detail="Checkpointer connection pool not initialized"
         )
 
     try:
-        # ⭐ Direct SQL deletion from checkpoints table
-        # LangGraph's PostgresSaver doesn't have a built-in delete method,
-        # so we need to delete directly from the database
-        db = next(get_db())
+        # ⭐ Use async connection pool to delete from all LangGraph tables
+        # LangGraph's PostgresSaver creates multiple tables via setup():
+        # - checkpoints: main checkpoint data
+        # - checkpoint_blobs: binary data storage
+        # - checkpoint_writes: write operations log
+        total_deleted = 0
 
-        # Delete from checkpoints table (LangGraph's table)
-        # The table structure is managed by LangGraph's setup()
-        delete_query = """
-        DELETE FROM checkpoints
-        WHERE thread_id = :thread_id
-        """
+        async with _pool.connection() as conn:
+            async with conn.cursor() as cur:
+                # Delete from checkpoint_writes first (foreign key constraint)
+                await cur.execute(
+                    "DELETE FROM checkpoint_writes WHERE thread_id = %s",
+                    (session_id,)
+                )
+                writes_deleted = cur.rowcount
+                total_deleted += writes_deleted
 
-        result = db.execute(
-            delete_query,
-            {"thread_id": session_id}
-        )
-        db.commit()
+                # Delete from checkpoint_blobs
+                await cur.execute(
+                    "DELETE FROM checkpoint_blobs WHERE thread_id = %s",
+                    (session_id,)
+                )
+                blobs_deleted = cur.rowcount
+                total_deleted += blobs_deleted
 
-        if result.rowcount == 0:
+                # Delete from checkpoints (main table)
+                await cur.execute(
+                    "DELETE FROM checkpoints WHERE thread_id = %s",
+                    (session_id,)
+                )
+                checkpoints_deleted = cur.rowcount
+                total_deleted += checkpoints_deleted
+
+            await conn.commit()
+
+        if total_deleted == 0:
             raise HTTPException(
                 status_code=404,
                 detail=f"Session '{session_id}' not found"
             )
 
-        logger.info(f"Deleted session {session_id} ({result.rowcount} checkpoints)")
+        logger.info(f"Deleted session {session_id}: checkpoints={checkpoints_deleted}, blobs={blobs_deleted}, writes={writes_deleted}")
 
         return {
             "message": f"Session '{session_id}' deleted successfully",
-            "deleted_count": result.rowcount
+            "deleted_count": total_deleted
         }
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error deleting session: {str(e)}", exc_info=True)
-        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Failed to delete session: {str(e)}"
@@ -514,11 +596,25 @@ async def list_agents():
             {
                 "id": "task-igniter",
                 "name": "Task Igniter Agent",
-                "description": "任务启动仪式 - 帮助分解模糊任务为可执行子任务 (LangGraph 1.0)",
+                "description": "任务启动仪式 - 帮助分解模糊任务为可执行子任务 (LangGraph 1.0 单层架构)",
                 "framework": "LangGraph 1.0",
                 "capabilities": [
                     "任务分析",
                     "任务分解",
+                    "最小可行任务识别"
+                ]
+            },
+            {
+                "id": "deep-task-researcher",
+                "name": "Deep Task Researcher",
+                "description": "深度任务研究员 - 基于知识库研究的智能任务分解 (LangGraph 1.0 三层架构)",
+                "framework": "LangGraph 1.0",
+                "capabilities": [
+                    "用户意图澄清",
+                    "知识库语义搜索",
+                    "多层级研究委托",
+                    "战略思考和反思",
+                    "结构化任务分解",
                     "最小可行任务识别"
                 ]
             }
@@ -541,6 +637,110 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "chat-api",
-        "agents": ["task-igniter"],
+        "agents": ["task-igniter", "deep-task-researcher"],
         "timestamp": _get_timestamp(),
     }
+
+
+# ============================================================================
+# WebSocket Endpoint for Real-time Chat
+# ============================================================================
+
+@router.websocket("/ws/agents/{agent_id}/chat")
+async def websocket_agent_chat(
+    websocket: WebSocket,
+    agent_id: str
+):
+    """
+    WebSocket endpoint for real-time agent chat.
+
+    Replaces SSE for better bidirectional communication.
+
+    Args:
+        websocket: WebSocket connection
+        agent_id: Agent ID (task-igniter or deep-task-researcher)
+
+    Message Format (Client -> Server):
+        {
+            "type": "message",
+            "content": "user message",
+            "session_id": "optional_session_id",
+            "dependencies": {"task_id": 123}  // optional
+        }
+
+    Message Format (Server -> Client):
+        {
+            "event": "RunStarted|RunContent|ToolCallStarted|RunCompleted|RunError",
+            "content": "...",
+            "session_id": "...",
+            "created_at": 1234567890,
+            ...
+        }
+    """
+    await websocket.accept()
+
+    try:
+        while True:
+            # Receive message from client
+            data = await websocket.receive_json()
+
+            if data.get("type") != "message":
+                await websocket.send_json({
+                    "event": RunEvent.RUN_ERROR,
+                    "content": f"Unknown message type: {data.get('type')}",
+                    "created_at": _get_timestamp()
+                })
+                continue
+
+            message = data.get("content", "")
+            session_id = data.get("session_id")
+            dependencies = data.get("dependencies")
+
+            if not message:
+                await websocket.send_json({
+                    "event": RunEvent.RUN_ERROR,
+                    "content": "Empty message content",
+                    "created_at": _get_timestamp()
+                })
+                continue
+
+            # Validate agent_id
+            if agent_id not in ["task-igniter", "deep-task-researcher"]:
+                await websocket.send_json({
+                    "event": RunEvent.RUN_ERROR,
+                    "content": f"Agent '{agent_id}' not found. Available: task-igniter, deep-task-researcher",
+                    "created_at": _get_timestamp()
+                })
+                continue
+
+            # Run agent and stream results
+            try:
+                async for chunk_text in stream_agent_run(
+                    agent_id=agent_id,
+                    message=message,
+                    stream=True,
+                    user_id=None,
+                    session_id=session_id,
+                    dependencies=json.dumps(dependencies) if dependencies else None
+                ):
+                    # Parse the SSE chunk and send via WebSocket
+                    try:
+                        chunk_data = json.loads(chunk_text.strip())
+                        await websocket.send_json(chunk_data)
+                    except json.JSONDecodeError:
+                        # Skip non-JSON chunks
+                        pass
+
+            except Exception as e:
+                logger.error(f"WebSocket agent error: {str(e)}", exc_info=True)
+
+                await websocket.send_json({
+                    "event": RunEvent.RUN_ERROR,
+                    "content": f"Agent error: {str(e)}",
+                    "created_at": _get_timestamp()
+                })
+
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for agent {agent_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error: {str(e)}", exc_info=True)

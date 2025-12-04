@@ -363,9 +363,12 @@ export const useChatStore = defineStore('chat', () => {
   // Actions - Send Message
   // ============================================================================
 
+  // WebSocket instance
+  let ws: WebSocket | null = null
+
   /**
-   * Send message to AI agent
-   * Handles SSE streaming from backend LangGraph agent
+   * Send message to AI agent using WebSocket
+   * Replaces SSE streaming with WebSocket for better bidirectional communication
    */
   async function sendMessage(message: string): Promise<void> {
     // 1. Precondition check
@@ -382,7 +385,7 @@ export const useChatStore = defineStore('chat', () => {
       id: `msg_${Date.now()}_user`,
       role: 'user',
       content: message,
-      created_at: new Date()
+      created_at: Date.now()
     }
     addMessage(userMessage)
 
@@ -391,7 +394,7 @@ export const useChatStore = defineStore('chat', () => {
       id: `msg_${Date.now()}_assistant`,
       role: 'assistant',
       content: '',
-      created_at: new Date()
+      created_at: Date.now()
     }
     addMessage(assistantMessage)
 
@@ -399,82 +402,95 @@ export const useChatStore = defineStore('chat', () => {
     setStreaming(true)
 
     try {
-      // 5. Construct API request
-      const url = 'http://localhost:8000/api/chat/agents/task-igniter/runs'
+      // 5. Connect to WebSocket if not already connected
+      const wsUrl = 'ws://localhost:8000/api/chat/ws/agents/task-igniter/chat'
 
-      // Build form data
-      const formData = new URLSearchParams()
-      formData.append('message', message)
-      formData.append('stream', 'true')
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        ws = new WebSocket(wsUrl)
 
-      if (currentSessionId.value) {
-        formData.append('session_id', currentSessionId.value)
-      }
-
-      if (currentTaskId.value) {
-        formData.append('dependencies', JSON.stringify({ task_id: currentTaskId.value }))
-      }
-
-      // 6. Send request and process SSE stream
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: formData.toString()
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      if (!response.body) {
-        throw new Error('Response body is null')
-      }
-
-      // Read stream
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-
-        if (done) {
-          break
+        ws.onopen = () => {
+          console.log('[ChatStore] WebSocket connected')
         }
 
-        // Decode chunk
-        buffer += decoder.decode(value, { stream: true })
-
-        // Process complete lines (JSON events)
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || '' // Keep incomplete line in buffer
-
-        for (const line of lines) {
-          const trimmedLine = line.trim()
-          if (!trimmedLine) continue
-
+        ws.onmessage = (event) => {
           try {
-            // Parse JSON event
-            const chunk: RunResponseContent = JSON.parse(trimmedLine)
-
-            // Process chunk using existing logic
+            const chunk: RunResponseContent = JSON.parse(event.data)
             processStreamChunk(chunk)
           } catch (parseError) {
-            console.error('[ChatStore] Failed to parse SSE chunk:', parseError, 'Line:', trimmedLine)
+            console.error('[ChatStore] Failed to parse WebSocket message:', parseError)
           }
         }
+
+        ws.onerror = (error) => {
+          console.error('[ChatStore] WebSocket error:', error)
+          setLastMessageError(true)
+          setStreamingError('WebSocket connection error')
+          setStreaming(false)
+        }
+
+        ws.onclose = () => {
+          console.log('[ChatStore] WebSocket closed')
+          setStreaming(false)
+        }
+
+        // Wait for connection to open
+        await new Promise<void>((resolve, reject) => {
+          if (!ws) {
+            reject(new Error('WebSocket is null'))
+            return
+          }
+
+          const timeout = setTimeout(() => {
+            reject(new Error('WebSocket connection timeout'))
+          }, 5000)
+
+          ws.addEventListener('open', () => {
+            clearTimeout(timeout)
+            resolve()
+          }, { once: true })
+
+          ws.addEventListener('error', (error) => {
+            clearTimeout(timeout)
+            reject(error)
+          }, { once: true })
+        })
       }
+
+      // 6. Send message via WebSocket
+      const payload = {
+        type: 'message',
+        content: message,
+        session_id: currentSessionId.value || undefined,
+        dependencies: currentTaskId.value
+          ? { task_id: currentTaskId.value }
+          : undefined
+      }
+
+      ws.send(JSON.stringify(payload))
 
     } catch (error: any) {
       // 7. Error handling
       console.error('[ChatStore] sendMessage error:', error)
       setLastMessageError(true)
       setStreamingError(error.message || 'Unknown error occurred')
-    } finally {
-      // 8. Cleanup
       setStreaming(false)
+
+      // Close WebSocket on error
+      if (ws) {
+        ws.close()
+        ws = null
+      }
+    }
+  }
+
+  /**
+   * Close WebSocket connection
+   */
+  function closeWebSocket() {
+    if (ws) {
+      ws.close()
+      ws = null
+      console.log('[ChatStore] WebSocket connection closed manually')
     }
   }
 
@@ -498,19 +514,60 @@ export const useChatStore = defineStore('chat', () => {
         break
 
       case RunEvent.RunContent:
-        // Update content (full replacement)
+        // Append content (incremental streaming)
         if (typeof chunk.content === 'string') {
-          updateLastMessageContent(chunk.content)
+          appendToLastMessage(chunk.content)
         }
         break
 
       case RunEvent.ToolCallStarted:
-      case RunEvent.ToolCallCompleted:
-        // Update tool call
+        // Tool call started - create new tool call entry
+        if (chunk.event_data) {
+          const toolCall: ToolCall = {
+            role: 'assistant',
+            content: null,
+            tool_call_id: `tool_${Date.now()}`,
+            tool_name: chunk.event_data.tool_name || 'unknown',
+            tool_args: chunk.event_data.tool_args || {},
+            tool_call_error: false,
+            metrics: { time: 0 },
+            created_at: chunk.created_at || Date.now()
+          }
+          updateToolCall(toolCall)
+        }
+        // Legacy format support (if tool object provided)
         if (chunk.tool) {
           updateToolCall(chunk.tool)
         }
-        // Handle multiple tools
+        if (chunk.tools && chunk.tools.length > 0) {
+          chunk.tools.forEach((tool) => updateToolCall(tool))
+        }
+        break
+
+      case RunEvent.ToolCallCompleted:
+        // Tool call completed - update with result
+        if (chunk.event_data) {
+          // Find the most recent tool call with matching name
+          const lastMsg = messages.value[messages.value.length - 1]
+          if (lastMsg && lastMsg.tool_calls && lastMsg.role === 'assistant') {
+            const matchingTool = lastMsg.tool_calls
+              .slice()
+              .reverse()
+              .find((tc) => tc.tool_name === chunk.event_data!.tool_name && !tc.content)
+
+            if (matchingTool) {
+              // Ensure content is string or null
+              matchingTool.content = typeof chunk.content === 'string' ? chunk.content : null
+              // Calculate execution time if possible
+              const executionTime = chunk.created_at - matchingTool.created_at
+              matchingTool.metrics = { time: executionTime }
+            }
+          }
+        }
+        // Legacy format support
+        if (chunk.tool) {
+          updateToolCall(chunk.tool)
+        }
         if (chunk.tools && chunk.tools.length > 0) {
           chunk.tools.forEach((tool) => updateToolCall(tool))
         }
@@ -618,6 +675,7 @@ export const useChatStore = defineStore('chat', () => {
 
     // Actions - Stream Processing
     processStreamChunk,
-    sendMessage
+    sendMessage,
+    closeWebSocket
   }
 })
