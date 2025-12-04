@@ -6,7 +6,7 @@ export interface Task {
   id: number
   title: string
   description?: string
-  status: 'pending' | 'in_progress' | 'completed' | 'overdue'
+  status: 'pending' | 'in_progress' | 'completed' | 'overdue' | 'archived'
   priority: number
   due_date?: string
   start_time?: string
@@ -17,6 +17,7 @@ export interface Task {
   created_at: string
   updated_at: string
   completed_at?: string
+  completion_notes?: string
   subtasks?: Task[]
 }
 
@@ -68,9 +69,6 @@ export interface Note {
   view_count: number
   sort_order: number
 
-  // Iteration 2: Attachments
-  attachments: Attachment[]
-
   // Iteration 3: Wiki Links + Folders
   parent_note_id?: number
 }
@@ -112,17 +110,7 @@ export interface SearchHistory {
   timestamp: string
 }
 
-// Iteration 2: Attachments + Templates
-
-export interface Attachment {
-  id: number
-  note_id: number
-  filename: string
-  filepath: string
-  filesize: number
-  mimetype: string
-  created_at: string
-}
+// Iteration 2: Templates
 
 // Templates now managed via localStorage (see services/templateStorage.ts)
 export type { LocalTemplate } from '@/services/templateStorage'
@@ -170,4 +158,13 @@ export interface Backlink {
   note_title: string
   link_type: string
   created_at: string
+}
+
+// Pagination types
+export interface PaginatedNotes {
+  items: Note[]
+  total: number
+  page: number
+  size: number
+  pages: number
 }

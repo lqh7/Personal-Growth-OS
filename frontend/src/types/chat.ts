@@ -125,6 +125,7 @@ export interface Reference {
  * Core data type for message list display
  */
 export interface ChatMessage {
+  id?: string  // Unique message identifier
   role: 'user' | 'assistant' | 'system'
   content: string
   streamingError?: boolean
@@ -171,11 +172,20 @@ export interface SessionList {
  * Run response content from streaming API
  * This is the format received from /api/chat/stream endpoint
  */
+/**
+ * Event data for tool calls
+ */
+export interface ToolCallEventData {
+  tool_name: string
+  tool_args?: Record<string, unknown>
+  tool_result?: string
+}
+
 export interface RunResponseContent {
   content?: string | object
   content_type: string
   event: RunEvent
-  event_data?: object
+  event_data?: ToolCallEventData
   messages?: Array<{
     role: string
     content: string | null

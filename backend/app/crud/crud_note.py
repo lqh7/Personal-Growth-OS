@@ -4,8 +4,8 @@ CRUD operations for Note entity.
 from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import Note, Tag, SearchHistory
-from app.schemas.note import NoteCreate, NoteUpdate, SearchHistoryCreate
+from app.db.models import Note, Tag
+from app.schemas.note import NoteCreate, NoteUpdate
 
 
 def get_note(db: Session, note_id: int) -> Optional[Note]:
@@ -31,6 +31,15 @@ def get_notes(
     )
 
     return query.order_by(Note.updated_at.desc()).offset(skip).limit(limit).all()
+
+
+def get_notes_count(db: Session, project_id: Optional[int] = None) -> int:
+    """Get total count of notes."""
+    query = db.query(Note)
+    if project_id is not None:
+        # Note: project_id filtering can be added if Note model has project_id
+        pass
+    return query.count()
 
 
 def create_note(db: Session, note: NoteCreate) -> Note:
@@ -160,22 +169,3 @@ def increment_note_view_count(db: Session, note_id: int) -> Optional[Note]:
     return db_note
 
 
-# Search History operations
-
-def create_search_history(db: Session, query_text: str, result_count: int) -> SearchHistory:
-    """Create a new search history entry."""
-    db_search = SearchHistory(query_text=query_text, result_count=result_count)
-    db.add(db_search)
-    db.commit()
-    db.refresh(db_search)
-    return db_search
-
-
-def get_search_history(db: Session, limit: int = 10) -> List[SearchHistory]:
-    """Get recent search history entries."""
-    return (
-        db.query(SearchHistory)
-        .order_by(SearchHistory.timestamp.desc())
-        .limit(limit)
-        .all()
-    )

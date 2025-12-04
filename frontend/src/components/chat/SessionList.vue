@@ -54,22 +54,11 @@
       </div>
     </div>
 
-    <!-- Load more button -->
-    <div v-if="hasMore" class="load-more">
-      <el-button
-        text
-        type="primary"
-        :loading="isLoadingMore"
-        @click="handleLoadMore"
-      >
-        加载更多
-      </el-button>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Refresh, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { storeToRefs } from 'pinia'
@@ -87,50 +76,25 @@ const { sessions, currentSessionId, isSessionsLoading } = storeToRefs(chatStore)
  * Local state
  */
 const isLoading = ref(false)
-const isLoadingMore = ref(false)
-const currentPage = ref(1)
-const totalSessions = ref(0)
-const pageSize = 20
-
-/**
- * Computed
- */
-const hasMore = computed(() => {
-  return sessions.value.length < totalSessions.value
-})
 
 /**
  * Load sessions from API
+ * 一次性加载所有会话列表（不分页）
  */
-async function loadSessions(append: boolean = false) {
+async function loadSessions() {
   try {
-    if (append) {
-      isLoadingMore.value = true
-    } else {
-      isLoading.value = true
-      chatStore.setSessionsLoading(true)
-    }
+    isLoading.value = true
+    chatStore.setSessionsLoading(true)
 
-    const response = await getSessions(
-      undefined, // agentId
-      pageSize,
-      (currentPage.value - 1) * pageSize
-    )
-
-    totalSessions.value = response.total
-
-    if (append) {
-      chatStore.setSessions([...sessions.value, ...response.sessions])
-    } else {
-      chatStore.setSessions(response.sessions)
-    }
+    // 一次性加载所有会话（limit设置足够大）
+    const response = await getSessions(undefined, 100, 0)
+    chatStore.setSessions(response.sessions)
 
   } catch (error) {
     console.error('[SessionList] Load sessions error:', error)
     ElMessage.error('加载对话历史失败')
   } finally {
     isLoading.value = false
-    isLoadingMore.value = false
     chatStore.setSessionsLoading(false)
   }
 }
@@ -139,16 +103,7 @@ async function loadSessions(append: boolean = false) {
  * Handle refresh
  */
 async function handleRefresh() {
-  currentPage.value = 1
-  await loadSessions(false)
-}
-
-/**
- * Handle load more
- */
-async function handleLoadMore() {
-  currentPage.value++
-  await loadSessions(true)
+  await loadSessions()
 }
 
 /**
@@ -156,11 +111,23 @@ async function handleLoadMore() {
  */
 async function handleSelectSession(session: SessionEntry) {
   try {
+    // 1. 清空现有消息
+    chatStore.clearMessages()
+
+    // 2. 设置当前会话ID (clearMessages会清空，需要重新设置)
     chatStore.setCurrentSessionId(session.session_id)
 
-    // Load session history
+    // 3. 加载会话历史消息
     const history = await getSessionHistory(session.session_id)
-    chatStore.setSessions(history.messages as any) // TODO: Fix type
+
+    // 4. 将历史消息添加到 messages 列表 (不是 sessions!)
+    history.messages.forEach(msg => {
+      chatStore.addMessage({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+        created_at: msg.created_at
+      })
+    })
 
     ElMessage.success('已加载对话历史')
   } catch (error) {
@@ -338,11 +305,5 @@ onMounted(() => {
     opacity: 0;
     transition: opacity 0.2s;
   }
-}
-
-.load-more {
-  padding: 12px;
-  text-align: center;
-  border-top: 1px solid #e4e7ed;
 }
 </style>

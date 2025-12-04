@@ -4,6 +4,28 @@
     :class="{ 'is-pinned': note.is_pinned }"
     @click="$emit('click')"
   >
+    <!-- Quick Actions (visible on hover) -->
+    <div class="quick-actions" @click.stop>
+      <el-tooltip :content="note.is_pinned ? '取消置顶' : '置顶'" placement="top">
+        <button
+          class="quick-action-btn"
+          :class="{ active: note.is_pinned }"
+          @click="handleTogglePin"
+        >
+          <span>📌</span>
+        </button>
+      </el-tooltip>
+      <el-tooltip :content="note.is_favorited ? '取消收藏' : '收藏'" placement="top">
+        <button
+          class="quick-action-btn"
+          :class="{ active: note.is_favorited }"
+          @click="handleToggleFavorite"
+        >
+          <span>{{ note.is_favorited ? '⭐' : '☆' }}</span>
+        </button>
+      </el-tooltip>
+    </div>
+
     <!-- Cover Image or Gradient Background -->
     <div class="card-cover" :style="coverStyle">
       <span v-if="note.emoji" class="card-emoji">{{ note.emoji }}</span>
@@ -76,9 +98,19 @@ interface Props {
 
 const props = defineProps<Props>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'click'): void
+  (e: 'toggle-pin', noteId: number, pinned: boolean): void
+  (e: 'toggle-favorite', noteId: number, favorited: boolean): void
 }>()
+
+function handleTogglePin() {
+  emit('toggle-pin', props.note.id, !props.note.is_pinned)
+}
+
+function handleToggleFavorite() {
+  emit('toggle-favorite', props.note.id, !props.note.is_favorited)
+}
 
 // Truncate content to max 150 characters for preview
 const truncatedContent = computed(() => {
@@ -159,6 +191,11 @@ function formatTime(dateString: string): string {
     transform: translateY(-6px) scale(1.02);
     box-shadow: $shadow-lg;
     border-color: rgba(136, 179, 168, 0.4);
+
+    .quick-actions {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   &.is-pinned {
@@ -180,6 +217,49 @@ function formatTime(dateString: string): string {
         transparent 100%);
       pointer-events: none;
     }
+  }
+}
+
+// Quick action buttons (visible on hover)
+.quick-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  z-index: 10;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: all 0.2s ease;
+}
+
+.quick-action-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+  &:hover {
+    background: rgba(255, 255, 255, 1);
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  &.active {
+    background: rgba(136, 179, 168, 0.2);
+  }
+
+  span {
+    line-height: 1;
   }
 }
 

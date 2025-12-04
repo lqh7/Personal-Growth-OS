@@ -52,6 +52,13 @@ class NoteUpdate(BaseModel):
     source_url: Optional[str] = Field(None, max_length=2048)
     tag_names: Optional[List[str]] = None
 
+    # Iteration 1: Core enhancements - now updatable
+    cover_image: Optional[str] = Field(None, max_length=2048, description="Cover image URL")
+    emoji: Optional[str] = Field(None, max_length=10, description="Emoji icon (e.g., 📝)")
+    is_pinned: Optional[bool] = Field(None, description="Whether the note is pinned")
+    is_favorited: Optional[bool] = Field(None, description="Whether the note is favorited")
+    sort_order: Optional[int] = Field(None, description="Custom sort order weight")
+
 
 class NoteInDB(NoteBase):
     """Schema for note as stored in database."""
@@ -79,20 +86,28 @@ class RelatedNote(BaseModel):
     similarity_score: float = Field(..., ge=0.0, le=1.0)
 
 
-class SearchHistoryBase(BaseModel):
-    """Base schema for SearchHistory."""
-    query_text: str = Field(..., max_length=500)
-    result_count: int = Field(0, description="Number of results returned")
+# Pagination schemas
+class PaginatedNotes(BaseModel):
+    """Paginated response for notes list."""
+    items: List[Note]
+    total: int = Field(..., description="Total number of notes")
+    page: int = Field(..., description="Current page number (1-indexed)")
+    size: int = Field(..., description="Page size")
+    pages: int = Field(..., description="Total number of pages")
 
 
-class SearchHistoryCreate(SearchHistoryBase):
-    """Schema for creating search history entry."""
-    pass
+# Batch operation schemas
+class BatchNoteIds(BaseModel):
+    """Schema for batch operations with note IDs."""
+    note_ids: List[int] = Field(..., description="List of note IDs to operate on")
 
 
-class SearchHistory(SearchHistoryBase):
-    """Public schema for search history."""
-    id: int
-    timestamp: datetime
+class BatchPinRequest(BatchNoteIds):
+    """Schema for batch pin/unpin operation."""
+    pinned: bool = Field(..., description="Whether to pin (True) or unpin (False)")
 
-    model_config = ConfigDict(from_attributes=True)
+
+class BatchTagRequest(BatchNoteIds):
+    """Schema for batch tag operation."""
+    tag_names: List[str] = Field(..., description="List of tag names to add")
+    mode: str = Field("add", description="Mode: 'add' to add tags, 'replace' to replace all tags")

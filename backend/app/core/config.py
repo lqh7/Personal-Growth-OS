@@ -2,9 +2,10 @@
 Application configuration management using Pydantic Settings.
 """
 from typing import List, Union
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict, PydanticBaseSettingsSource
 from pydantic import field_validator
 from functools import lru_cache
+from typing import Any, Tuple, Type
 
 
 class Settings(BaseSettings):
@@ -62,28 +63,51 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
-        extra="ignore"  # Ignore extra fields in .env to allow hot-reload
+        extra="ignore",  # Ignore extra fields in .env to allow hot-reload
+        env_prefix="",  # No prefix
+        validate_default=True
     )
 
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        """
+        Customize settings sources priority.
 
-@lru_cache()
+        Prioritize .env file over environment variables to avoid shell environment
+        variables (like Claude Code's OPENAI_API_KEY) from overriding .env config.
+
+        Priority (highest to lowest):
+        1. init_settings (passed to __init__)
+        2. dotenv_settings (.env file) <- PRIORITIZED
+        3. env_settings (environment variables)
+        4. file_secret_settings (secrets file)
+        """
+        return init_settings, dotenv_settings, env_settings, file_secret_settings
+
+
+# DO NOT use lru_cache - it causes stale config issues
 def get_settings() -> Settings:
-    """Get cached settings instance."""
+    """Get settings instance (not cached to avoid stale config)."""
     return Settings()
 
 
 def reload_settings():
     """
-    Reload settings from .env file by clearing cache and creating new instance.
+    Reload settings from .env file by creating new instance.
     This allows runtime configuration updates without restarting the service.
     """
     global settings
-    # Clear the lru_cache to force re-reading from .env
-    get_settings.cache_clear()
     # Create new settings instance
-    settings = get_settings()
+    settings = Settings()
     return settings
 
 
-# Global settings instance
-settings = get_settings()
+# Global settings instance - will be fresh on import
+settings = Settings()

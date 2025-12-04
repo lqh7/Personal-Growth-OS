@@ -187,6 +187,11 @@ CREATE DATABASE personal_growth_os;
 - `fixtures/create_test_data.py` - Generate sample projects and tasks for testing
 - `fixtures/create_test_tasks.py` - Generate sample tasks with various statuses
 
+**Reference Implementations** (in `library/`):
+- `open_deep_research/` - Original open_deep_research implementation (inspiration for deep_researcher agent)
+- `DingtalkChatbot/` - DingTalk chatbot library reference
+- `apscheduler/` - APScheduler library reference
+
 See `tests/README.md` and `backend/utils/README.md` for detailed usage instructions.
 
 **Note**: This project includes Windows-specific command syntax in many places. When working on Windows, use the Windows commands provided. On Linux/Mac, use the alternative commands shown.
@@ -234,6 +239,10 @@ Core entities with relationships:
    - Snooze button in task kanban floating task column
    - Tasks auto-reappear when snooze expires
    - Display in dedicated "延后任务" section on DashboardView
+   - **Task Reminder System** - DingTalk integration with APScheduler
+     - Automatic reminders for due tasks and task start times
+     - Configurable via `ENABLE_TASK_REMINDER`, `DINGTALK_WEBHOOK`, `DINGTALK_SECRET` in `.env`
+     - Implementation: `backend/app/core/scheduler.py`
 
 4. **Contextual Knowledge Resurrection (知识自动重现)** - IMPLEMENTED
    - Semantic search API implemented via **llama-index PGVectorStore**
@@ -281,7 +290,10 @@ backend/app/
 ├── main.py                  # FastAPI entry point, CORS, UTF-8 encoding middleware
 ├── core/
 │   ├── config.py           # Settings (Pydantic BaseSettings from .env)
-│   └── llm_factory.py      # LLM provider abstraction (LangGraph + llama-index)
+│   ├── llm_factory.py      # LLM provider abstraction (LangGraph + llama-index)
+│   ├── llm_utils.py        # JWT authentication support for LLM proxies
+│   ├── scheduler.py        # APScheduler for task reminders
+│   └── langgraph_checkpoint.py  # LangGraph PostgreSQL checkpointer
 ├── db/
 │   ├── database.py         # SQLAlchemy engine and session management
 │   └── models.py           # SQLAlchemy ORM models (all entities)
@@ -385,6 +397,127 @@ The Task Igniter Agent (backend/app/agents/task_igniter_langgraph.py) demonstrat
 
 Reference implementation: backend/app/agents/task_igniter_langgraph.py
 
+### Deep Task Researcher Architecture (LangGraph 1.0)
+
+**NEW**: The system now includes a sophisticated multi-layer research agent inspired by open_deep_research, implementing advanced LangGraph 1.0 patterns for intelligent task decomposition.
+
+**Architecture Overview**:
+
+The Deep Task Researcher uses a **three-layer hierarchical structure**:
+
+```
+┌─────────────────────────────────────────────────┐
+│           Main: Deep Task Researcher            │
+│  (clarify → research_brief → supervisor → final) │
+└──────────────────────┬──────────────────────────┘
+                       │
+                       ▼
+        ┌──────────────────────────────┐
+        │  Subgraph: Supervisor        │
+        │  (delegate → tools → reflect)│
+        └──────────┬───────────────────┘
+                   │
+                   ▼ (ConductResearch tool call)
+    ┌──────────────────────────────────────┐
+    │  Subgraph: Researcher                │
+    │  (search → think → compress)         │
+    └──────────────────────────────────────┘
+```
+
+**Key Features**:
+
+1. **Command API**: Type-safe routing with `Command[Literal["node1", "node2"]]` return types
+2. **Structured Output**: Forces LLM to return Pydantic models via `.with_structured_output()`
+3. **Tool Integration**:
+   - `search_knowledge_base`: RAG tool using pgvector semantic search
+   - `think_tool`: Strategic reflection for better decision-making
+4. **Subgraph Delegation**: Supervisor delegates research tasks to multiple Researcher agents running in parallel
+5. **Automatic Clarification**: Detects vague user input and asks clarifying questions before proceeding
+6. **Persistent Sessions**: Uses LangGraph PostgreSQL checkpointer for conversation history
+
+**File Structure**:
+
+```
+backend/app/agents/deep_researcher/
+├── __init__.py                 # Package exports
+├── state.py                    # All state definitions + Pydantic models
+├── prompts.py                  # System prompts adapted from open_deep_research
+├── tools.py                    # search_knowledge_base + think_tool
+├── researcher_graph.py         # Researcher subgraph (search → compress)
+├── supervisor_graph.py         # Supervisor subgraph (delegate → collect)
+└── main_graph.py              # Main graph (clarify → decompose)
+```
+
+**State Definitions**:
+
+- **DeepTaskState** (Main graph): Messages, clarification flag, research brief, notes, final output
+- **SupervisorState** (Supervisor): Supervisor messages, research brief, notes, iteration count
+- **ResearcherState** (Researcher): Researcher messages, research topic, tool iterations, compressed research
+
+**Pydantic Models** (Structured Outputs):
+
+- `ClarifyWithUser`: Whether clarification is needed + question/verification
+- `ResearchBrief`: Detailed research question generated from user messages
+- `TaskDecomposition`: Main task + subtasks + minimum viable task index
+- `Subtask`: Title, description, priority (1-5)
+- `ConductResearch`: Tool for supervisor to delegate research
+- `Summary`: Compressed research findings
+
+**Agent Selection**:
+
+The Chat API (`/api/chat/agents/{agent_id}/runs`) now supports two agents:
+
+1. **`task-igniter`**: Legacy single-layer agent (simple, fast)
+2. **`deep-task-researcher`**: New three-layer research agent (comprehensive, slow)
+
+Usage example:
+```bash
+curl --location 'http://localhost:8000/api/chat/agents/deep-task-researcher/runs' \
+  --header 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode 'message=准备项目演示PPT' \
+  --data-urlencode 'stream=True'
+```
+
+**Workflow**:
+
+1. **Clarify Node**: Checks if user intent is clear. If not, returns clarifying question and ends.
+2. **Write Research Brief**: Converts user message into detailed research question.
+3. **Research Supervisor**: Delegates research to Supervisor subgraph:
+   - Supervisor decides which research tasks to delegate
+   - Spawns Researcher agents in parallel using `asyncio.gather()`
+   - Each Researcher searches knowledge base and thinks strategically
+   - Results are compressed and returned to Supervisor
+4. **Final Decomposition**: Generates structured task decomposition with:
+   - Main task title + description
+   - 3-5 subtasks (each with title, description, priority)
+   - Minimum viable task index (lowest friction starting point)
+
+**Tool Call Visualization**:
+
+The frontend chat interface now displays tool calls in real-time:
+- **ToolCallBadge** component shows tool name, arguments, and results
+- Hover popover displays detailed execution info
+- Execution time calculated and displayed
+- SSE events: `ToolCallStarted` → `ToolCallCompleted`
+
+**Reference Files**:
+- Implementation: `backend/app/agents/deep_researcher/main_graph.py`
+- API integration: `backend/app/api/endpoints/chat.py` (lines 78-103)
+- Frontend store: `frontend/src/stores/chatStore.ts` (lines 507-555)
+- UI component: `frontend/src/components/chat/ToolCallBadge.vue`
+
+**Performance Considerations**:
+- Supervisor can spawn multiple Researchers (configurable, default: 2 max)
+- Maximum research iterations: 6 (prevents infinite loops)
+- Each Researcher can make up to 10 tool calls
+- Typical response time: 5-15 seconds for complex tasks
+
+**When to Use Deep Task Researcher**:
+- User input is vague or needs clarification
+- Task requires domain knowledge from notes/documents
+- Complex multi-step projects needing strategic breakdown
+- When quality > speed (tradeoff: slower but more thorough)
+
 ### LLM Provider Integration
 
 The system supports multiple LLM providers through unified configuration in `.env`:
@@ -393,6 +526,9 @@ The system supports multiple LLM providers through unified configuration in `.en
 
 **For LangGraph Agents**:
 - Use `core/llm_factory.py::get_langgraph_model()` to get LangChain LLM instance
+- **Alternative**: Use `core/llm_utils.py::get_langchain_llm_with_auth()` for JWT authentication support
+  - Automatically detects JWT tokens (starts with "eyJ") vs standard API keys
+  - Supports proxy services that use JWT in Authorization header (e.g., TrendMicro proxy)
 - Returns ChatOpenAI, ChatAnthropic, or ChatOllama based on configuration
 - Automatically configures API keys and endpoints
 
@@ -542,9 +678,12 @@ cp .env.example backend/.env
 **Key Settings**:
 - `LLM_PROVIDER=openai|claude|ollama` (required)
 - `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` (required for respective provider)
+  - Supports both standard API keys (sk-...) and JWT tokens (eyJ...) for proxy services
 - `OPENAI_API_BASE` / `ANTHROPIC_API_BASE` (optional, for custom endpoints)
 - `DATABASE_URL=postgresql://user:password@host:5432/dbname` (required, cloud PostgreSQL)
 - `EMBEDDING_MODEL=all-MiniLM-L6-v2` (for local embedding generation)
+- `ENABLE_TASK_REMINDER=True` (optional, enable DingTalk task reminders)
+- `DINGTALK_WEBHOOK` / `DINGTALK_SECRET` (optional, for DingTalk notifications)
 
 Access via `backend/app/core/config.py:1` `settings` object (Pydantic with validation).
 
@@ -638,6 +777,10 @@ See `tests/README.md` for more details on available test scripts and fixtures.
 
 Project documentation files:
 - **`doc/系统现状总结.md`** ⭐ - **Current implementation status** (most accurate, use this first!)
+- **`doc/interview-logs/`** - STAR-format technical solution logs for interview preparation
+  - `2025-12-03-chat-streaming-react-agent.md` - Chat streaming + create_react_agent migration
+  - `2025-12-02-chat-checkpointer-async-fix.md` - AsyncPostgresSaver fix
+  - Indexed by technology stack, problem type, and keywords
 - `doc/需求分析.md` - Requirements and feature specifications (Chinese)
 - `doc/框架选型.md` - Framework selection rationale (explains LangGraph choice)
 - `doc/后端详细设计.md` - Backend detailed design (may reference older LangGraph plans)
@@ -747,16 +890,22 @@ The backend uses a custom `UTF8JSONResponse` class and middleware to ensure prop
 
 LangGraph Ecosystem:
 - `langgraph>=0.2.0` - State-based agent orchestration
+- `langgraph-checkpoint-postgres>=2.0.0` - LangGraph PostgreSQL persistence
 - `langchain>=0.3.0` - Core LangChain library
 - `langchain-openai` / `langchain-anthropic` / `langchain-community` - LLM integrations
+- `psycopg-binary>=3.2.0` - PostgreSQL driver for LangGraph checkpointer
 
 Vector & Embeddings:
 - `sentence-transformers>=2.2.0` - Embedding generation
 - `pgvector>=0.2.4` - Vector similarity search
 
 Database:
-- `psycopg2-binary>=2.9.9` - PostgreSQL driver
+- `psycopg2-binary>=2.9.9` - PostgreSQL driver for SQLAlchemy
 - `sqlalchemy==2.0.36` - ORM
+
+Task Scheduling & Notifications:
+- `apscheduler==3.10.4` - Task reminder scheduling
+- `DingtalkChatbot>=1.5.7` - DingTalk notification integration
 
 **Dependencies Removed**:
 - `agno` - Replaced by LangGraph 1.0

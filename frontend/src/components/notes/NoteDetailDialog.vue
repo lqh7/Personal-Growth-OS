@@ -57,9 +57,9 @@
 
       <!-- Content Area -->
       <main class="note-content">
-        <div v-if="!isEditing" class="content-view">
+        <div v-if="!isEditing" class="content-view" @click="handleContentClick">
           <MdPreview
-            :modelValue="note.content"
+            :modelValue="processedContent"
             :theme="'light'"
             class="markdown-preview"
           />
@@ -81,6 +81,14 @@
                 <line x1="10" y1="14" x2="21" y2="3"/>
               </svg>
             </a>
+          </div>
+
+          <!-- Backlinks Section -->
+          <div class="backlinks-section">
+            <NoteBacklinks
+              :note-id="note.id"
+              @navigate="handleBacklinkNavigate"
+            />
           </div>
         </div>
 
@@ -161,11 +169,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { Note } from '@/types'
 import { MdEditor, MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
+import NoteBacklinks from './NoteBacklinks.vue'
+import { useNoteStore } from '@/stores/noteStore'
 
 interface Props {
   modelValue: boolean
@@ -176,10 +186,13 @@ interface Emits {
   (e: 'update:modelValue', value: boolean): void
   (e: 'update', data: Partial<Note>): void
   (e: 'delete'): void
+  (e: 'navigate', noteId: number): void
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
+
+const noteStore = useNoteStore()
 
 const visible = computed({
   get: () => props.modelValue,
@@ -199,6 +212,42 @@ const editorToolbars = [
   'code', 'codeRow', 'link', 'image', '-',
   'table', 'revoke', 'next', 'save'
 ]
+
+// Process wiki links [[Title]] in content
+const processedContent = computed(() => {
+  if (!props.note.content) return ''
+
+  // Replace [[Title]] with clickable wiki links
+  // The link will be styled via CSS and handled via click event
+  return props.note.content.replace(
+    /\[\[([^\]]+)\]\]/g,
+    (match, title) => {
+      // Find the note by title
+      const linkedNote = noteStore.notes.find(n => n.title === title)
+      if (linkedNote) {
+        return `<span class="wiki-link" data-note-id="${linkedNote.id}" data-note-title="${title}">${title}</span>`
+      }
+      // If note doesn't exist, show as broken link
+      return `<span class="wiki-link broken" data-note-title="${title}">${title}</span>`
+    }
+  )
+})
+
+// Handle wiki link clicks
+function handleContentClick(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  if (target.classList.contains('wiki-link')) {
+    const noteId = target.dataset.noteId
+    const noteTitle = target.dataset.noteTitle
+
+    if (noteId) {
+      handleBacklinkNavigate(parseInt(noteId))
+    } else if (noteTitle) {
+      ElMessage.info(`笔记 "${noteTitle}" 不存在，点击可创建`)
+      // Could implement auto-create feature here
+    }
+  }
+}
 
 watch(() => props.note, (newNote) => {
   if (newNote) {
@@ -306,6 +355,11 @@ function formatUrl(url: string): string {
   } catch {
     return url
   }
+}
+
+function handleBacklinkNavigate(noteId: number) {
+  visible.value = false
+  emit('navigate', noteId)
 }
 </script>
 
@@ -581,6 +635,34 @@ function formatUrl(url: string): string {
       font-style: italic;
     }
 
+    // Wiki link styles
+    .wiki-link {
+      color: #0ea5e9;
+      background: rgba(14, 165, 233, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      font-weight: 500;
+
+      &:hover {
+        background: rgba(14, 165, 233, 0.2);
+        color: #0284c7;
+      }
+
+      &.broken {
+        color: #dc2626;
+        background: rgba(220, 38, 38, 0.1);
+        text-decoration: line-through;
+
+        &:hover {
+          background: rgba(220, 38, 38, 0.2);
+          color: #991b1b;
+        }
+      }
+    }
+
     ul, ol {
       padding-left: 1.5em;
       margin-bottom: 1.5em;
@@ -637,6 +719,12 @@ function formatUrl(url: string): string {
         transition: transform 0.2s ease;
       }
     }
+  }
+
+  .backlinks-section {
+    margin-top: 40px;
+    padding-top: 24px;
+    border-top: 1px solid #e7e5e4;
   }
 }
 

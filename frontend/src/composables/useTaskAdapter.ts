@@ -8,7 +8,7 @@ export interface ViewTask {
   id: string
   title: string
   description?: string
-  status: 'pending' | 'in_progress' | 'completed' | 'overdue'
+  status: 'pending' | 'in_progress' | 'completed' | 'overdue' | 'archived'
   priority: number
   startTime?: Date
   endTime?: Date
@@ -119,14 +119,6 @@ export function useTaskAdapter() {
     }
 
     return apiTask
-  }
-
-  /**
-   * Extract time (HH:mm) from ISO date string
-   */
-  function extractTime(isoDate: string): string {
-    const date = new Date(isoDate)
-    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
   }
 
   return {

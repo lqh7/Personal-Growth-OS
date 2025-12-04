@@ -3,7 +3,7 @@
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Note, NoteCreate, RelatedNote, Tag, SearchHistory, Attachment, Backlink } from '@/types'
+import type { Note, NoteCreate, RelatedNote, Tag, SearchHistory, Backlink, PaginatedNotes } from '@/types'
 import apiClient from '@/api/client'
 
 export const useNoteStore = defineStore('note', () => {
@@ -155,65 +155,144 @@ export const useNoteStore = defineStore('note', () => {
     }
   }
 
-  // Iteration 2: Attachments
+  // ============================================
+  // Text Search
+  // ============================================
 
-  async function fetchAttachments(noteId: number): Promise<Attachment[]> {
-    try {
-      const response = await apiClient.get(`/attachments/note/${noteId}`)
-      return response.data
-    } catch (e: any) {
-      console.error('Failed to fetch attachments:', e)
-      return []
-    }
-  }
-
-  async function uploadAttachment(noteId: number, file: File): Promise<Attachment> {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('note_id', String(noteId))
+  async function searchNotesText(query: string, limit = 20): Promise<Note[]> {
+    loading.value = true
+    error.value = null
 
     try {
-      const response = await apiClient.post('/attachments/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        params: { note_id: noteId }
+      const response = await apiClient.get('/notes/search/text', {
+        params: { query, limit }
       })
       return response.data
     } catch (e: any) {
-      error.value = e.message || 'Failed to upload attachment'
+      error.value = e.message || 'Failed to search notes'
       throw e
+    } finally {
+      loading.value = false
     }
   }
 
-  async function downloadAttachment(attachmentId: number): Promise<void> {
+  // ============================================
+  // Paginated Fetch
+  // ============================================
+
+  async function fetchNotesPaginated(page = 1, size = 20): Promise<PaginatedNotes> {
+    loading.value = true
+    error.value = null
+
     try {
-      const response = await apiClient.get(`/attachments/${attachmentId}/download`, {
-        responseType: 'blob'
+      const response = await apiClient.get('/notes/paginated', {
+        params: { page, size }
       })
-      // Create download link
-      const url = window.URL.createObjectURL(new Blob([response.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', response.headers['content-disposition']?.split('filename=')[1] || 'download')
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
+      notes.value = response.data.items
+      return response.data
     } catch (e: any) {
-      error.value = e.message || 'Failed to download attachment'
+      error.value = e.message || 'Failed to fetch notes'
       throw e
+    } finally {
+      loading.value = false
     }
   }
 
-  async function deleteAttachment(attachmentId: number): Promise<void> {
+  // ============================================
+  // Batch Operations
+  // ============================================
+
+  async function batchPin(noteIds: number[], pinned: boolean): Promise<Note[]> {
+    loading.value = true
     try {
-      await apiClient.delete(`/attachments/${attachmentId}`)
+      const response = await apiClient.post('/notes/batch/pin', {
+        note_ids: noteIds,
+        pinned
+      })
+      // Update local state
+      for (const updatedNote of response.data) {
+        const index = notes.value.findIndex(n => n.id === updatedNote.id)
+        if (index !== -1) {
+          notes.value[index] = updatedNote
+        }
+      }
+      return response.data
     } catch (e: any) {
-      error.value = e.message || 'Failed to delete attachment'
+      error.value = e.message || 'Failed to batch pin notes'
       throw e
+    } finally {
+      loading.value = false
     }
   }
 
+  async function batchFavorite(noteIds: number[], favorited: boolean): Promise<Note[]> {
+    loading.value = true
+    try {
+      const response = await apiClient.post('/notes/batch/favorite', {
+        note_ids: noteIds,
+        pinned: favorited  // API uses 'pinned' field
+      })
+      // Update local state
+      for (const updatedNote of response.data) {
+        const index = notes.value.findIndex(n => n.id === updatedNote.id)
+        if (index !== -1) {
+          notes.value[index] = updatedNote
+        }
+      }
+      return response.data
+    } catch (e: any) {
+      error.value = e.message || 'Failed to batch favorite notes'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function batchDelete(noteIds: number[]): Promise<{ deleted: number; total: number }> {
+    loading.value = true
+    try {
+      const response = await apiClient.post('/notes/batch/delete', {
+        note_ids: noteIds
+      })
+      // Remove deleted notes from local state
+      notes.value = notes.value.filter(n => !noteIds.includes(n.id))
+      return response.data
+    } catch (e: any) {
+      error.value = e.message || 'Failed to batch delete notes'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function batchTag(noteIds: number[], tagNames: string[], mode: 'add' | 'replace' = 'add'): Promise<Note[]> {
+    loading.value = true
+    try {
+      const response = await apiClient.post('/notes/batch/tag', {
+        note_ids: noteIds,
+        tag_names: tagNames,
+        mode
+      })
+      // Update local state
+      for (const updatedNote of response.data) {
+        const index = notes.value.findIndex(n => n.id === updatedNote.id)
+        if (index !== -1) {
+          notes.value[index] = updatedNote
+        }
+      }
+      await fetchTags()  // Refresh tags list
+      return response.data
+    } catch (e: any) {
+      error.value = e.message || 'Failed to batch tag notes'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // ============================================
   // Iteration 3: Links
+  // ============================================
 
   async function fetchBacklinks(noteId: number): Promise<Backlink[]> {
     try {
@@ -257,20 +336,22 @@ export const useNoteStore = defineStore('note', () => {
 
     // Actions
     fetchNotes,
+    fetchNotesPaginated,
     fetchTags,
     createNote,
     updateNote,
     deleteNote,
     searchNotesSemantic,
+    searchNotesText,
     togglePin,
     toggleFavorite,
     fetchSearchHistory,
 
-    // Attachments
-    fetchAttachments,
-    uploadAttachment,
-    downloadAttachment,
-    deleteAttachment,
+    // Batch Operations
+    batchPin,
+    batchFavorite,
+    batchDelete,
+    batchTag,
 
     // Links
     fetchBacklinks,

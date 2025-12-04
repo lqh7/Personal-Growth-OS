@@ -27,7 +27,7 @@
           :fetch-suggestions="querySearchHistory"
           placeholder="搜索笔记标题和内容..."
           clearable
-          style="width: 280px"
+          class="filter-search"
           @keyup.enter="handleSearch"
           @clear="clearSearch"
           @select="handleHistorySelect"
@@ -36,15 +36,20 @@
             <el-icon><Search /></el-icon>
           </template>
           <template #append>
-            <el-button @click="handleSearch" :loading="noteStore.loading">
-              搜索
+            <el-button @click="handleSearch" :loading="isSearching || noteStore.loading">
+              {{ isSearching ? '搜索中...' : '搜索' }}
             </el-button>
           </template>
           <template #default="{ item }">
             <div class="history-item">
               <el-icon><Clock /></el-icon>
-              <span>{{ item.value }}</span>
-              <span class="result-count">{{ item.result_count }}个结果</span>
+              <span class="history-text">{{ item.value }}</span>
+              <el-icon
+                class="delete-icon"
+                @mousedown.prevent="handleDeleteHistory(item.value)"
+              >
+                <CircleCloseFilled />
+              </el-icon>
             </div>
           </template>
         </el-autocomplete>
@@ -56,7 +61,7 @@
           collapse-tags-tooltip
           placeholder="按标签筛选"
           clearable
-          style="width: 200px"
+          class="filter-tags"
         >
           <el-option
             v-for="tag in noteStore.tags"
@@ -71,7 +76,7 @@
           </el-option>
         </el-select>
 
-        <el-select v-model="sortBy" placeholder="排序" style="width: 140px">
+        <el-select v-model="sortBy" placeholder="排序" class="filter-sort">
           <el-option label="最新更新" value="updated_at_desc" />
           <el-option label="最早更新" value="updated_at_asc" />
           <el-option label="最新创建" value="created_at_desc" />
@@ -138,6 +143,8 @@
             :note="result.note"
             :similarity-score="result.similarity_score"
             @click="handleNoteClick(result.note)"
+            @toggle-pin="handleTogglePin"
+            @toggle-favorite="handleToggleFavorite"
           />
         </div>
       </div>
@@ -150,6 +157,8 @@
             :key="note.id"
             :note="note"
             @click="handleNoteClick(note)"
+            @toggle-pin="handleTogglePin"
+            @toggle-favorite="handleToggleFavorite"
           />
         </div>
         <el-empty
@@ -185,50 +194,15 @@
       class="note-editor-dialog"
     >
       <template #header>
-        <div class="clean-header">
-          <!-- Left: Metadata controls -->
-          <div class="header-left">
-            <el-select
-              v-model="noteForm.tag_names"
-              multiple
-              filterable
-              allow-create
-              placeholder="添加标签"
-              size="small"
-              class="header-tags"
-            >
-              <el-option
-                v-for="tag in noteStore.tags"
-                :key="tag.id"
-                :label="tag.name"
-                :value="tag.name"
-              />
-            </el-select>
-            <el-input
-              v-model="noteForm.source_url"
-              placeholder="来源链接"
-              size="small"
-              class="header-source"
-              clearable
-            >
-              <template #prefix>
-                <el-icon><Link /></el-icon>
-              </template>
-            </el-input>
-          </div>
-
-          <!-- Right: Action buttons -->
-          <div class="header-right">
-            <el-button size="small" @click="closeDialog">取消</el-button>
-            <el-button
-              type="primary"
-              size="small"
-              @click="handleSave"
-              :loading="noteStore.loading"
-            >
-              {{ editingNote ? '保存' : '创建' }}
-            </el-button>
-          </div>
+        <div class="clean-header-v2">
+          <el-button text @click="closeDialog">取消</el-button>
+          <el-button
+            type="primary"
+            @click="handleSave"
+            :loading="noteStore.loading"
+          >
+            {{ editingNote ? '保存' : '创建' }}
+          </el-button>
         </div>
       </template>
 
@@ -249,30 +223,90 @@
             :toolbars="editorToolbars"
             :style="{ height: '550px' }"
             theme="light"
-          />
-        </div>
-
-        <!-- Attachments (only show when editing) -->
-        <div v-if="editingNote && currentNoteAttachments.length > 0" class="clean-attachments">
-          <div class="attachments-title">
-            附件 ({{ currentNoteAttachments.length }})
-          </div>
-          <AttachmentUploader
-            :note-id="editingNote.id"
-            :attachments="currentNoteAttachments"
-            @upload-success="handleAttachmentUploadSuccess"
-            @delete-success="handleAttachmentDelete"
-          />
+          >
+            <template #defToolbars>
+              <NormalToolbar title="插入笔记链接" @click="showNoteLinkPicker = true">
+                <template #trigger>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M10 6v2H5v11h11v-5h2v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6zm11-3v8h-2V6.413l-7.793 7.794-1.414-1.414L17.585 5H13V3h8z"/>
+                  </svg>
+                </template>
+              </NormalToolbar>
+            </template>
+          </MdEditor>
         </div>
       </div>
 
       <template #footer>
-        <div class="clean-footer">
+        <div class="clean-footer-v2">
+          <div class="meta-row">
+            <el-select
+              v-model="noteForm.tag_names"
+              multiple
+              filterable
+              allow-create
+              placeholder="添加标签"
+              size="small"
+              class="footer-tags"
+            >
+              <el-option
+                v-for="tag in noteStore.tags"
+                :key="tag.id"
+                :label="tag.name"
+                :value="tag.name"
+              />
+            </el-select>
+
+            <el-input
+              v-model="noteForm.source_url"
+              placeholder="来源链接（可选）"
+              size="small"
+              class="footer-source"
+              clearable
+            >
+              <template #prefix>
+                <el-icon><Link /></el-icon>
+              </template>
+            </el-input>
+          </div>
+
           <span v-if="editingNote" class="footer-time">
             上次编辑: {{ formatTime(editingNote.updated_at) }}
           </span>
         </div>
       </template>
+    </el-dialog>
+
+    <!-- Note Link Picker Dialog -->
+    <el-dialog
+      v-model="showNoteLinkPicker"
+      title="选择要链接的笔记"
+      width="500px"
+      class="note-link-picker-dialog"
+    >
+      <el-input
+        v-model="linkSearchQuery"
+        placeholder="搜索笔记..."
+        clearable
+        style="margin-bottom: 16px"
+      >
+        <template #prefix>
+          <el-icon><Search /></el-icon>
+        </template>
+      </el-input>
+
+      <div class="note-link-list">
+        <div
+          v-for="note in filteredNotesForLink"
+          :key="note.id"
+          class="note-link-item"
+          @click="insertNoteLink(note)"
+        >
+          <span class="note-title">{{ note.title }}</span>
+          <span class="note-date">{{ formatTime(note.updated_at) }}</span>
+        </div>
+        <el-empty v-if="filteredNotesForLink.length === 0" description="没有找到笔记" />
+      </div>
     </el-dialog>
 
     <!-- View Dialog - New High-Quality Design -->
@@ -282,25 +316,25 @@
       :note="viewingNote"
       @update="handleNoteUpdate"
       @delete="handleDelete"
+      @navigate="handleNavigateToNote"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Plus, Search, Link, Grid, List, Clock, EditPen, Close,
-  PriceTag, Paperclip, Check
+  PriceTag, Paperclip, Check, CircleCloseFilled
 } from '@element-plus/icons-vue'
 import { useNoteStore } from '@/stores/noteStore'
 import NoteCard from '@/components/notes/NoteCard.vue'
-import AttachmentUploader from '@/components/notes/AttachmentUploader.vue'
 import TemplateSelector from '@/components/notes/TemplateSelector.vue'
 import NoteDetailDialog from '@/components/notes/NoteDetailDialog.vue'
-import type { Note, RelatedNote, Attachment, TemplateRenderResponse } from '@/types'
+import type { Note, RelatedNote, TemplateRenderResponse } from '@/types'
 import { templateStorage } from '@/services/templateStorage'
-import { MdEditor, MdPreview } from 'md-editor-v3'
+import { MdEditor, MdPreview, NormalToolbar } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 
 const noteStore = useNoteStore()
@@ -321,12 +355,52 @@ const viewMode = ref<'grid' | 'list'>('grid')
 
 // Iteration 1: Quick filters
 const quickFilter = ref<'pinned' | 'favorited' | 'recent' | null>(null)
-const searchHistory = ref<Array<{ value: string; result_count: number }>>([])
 const titleFocused = ref(false)
+const isSearching = ref(false)
 
-// Iteration 2: Attachments & Templates
-const currentNoteAttachments = ref<Attachment[]>([])
+// ============================================
+// localStorage Search History
+// ============================================
+const SEARCH_HISTORY_KEY = 'note_search_history'
+const MAX_HISTORY_ITEMS = 10
+
+interface LocalSearchHistory {
+  query: string
+  timestamp: number
+}
+
+function getLocalSearchHistory(): LocalSearchHistory[] {
+  try {
+    const data = localStorage.getItem(SEARCH_HISTORY_KEY)
+    return data ? JSON.parse(data) : []
+  } catch {
+    return []
+  }
+}
+
+function saveSearchToHistory(query: string) {
+  const history = getLocalSearchHistory()
+  // Remove existing duplicate
+  const filtered = history.filter(h => h.query !== query)
+  // Add to front
+  filtered.unshift({ query, timestamp: Date.now() })
+  // Limit count
+  const trimmed = filtered.slice(0, MAX_HISTORY_ITEMS)
+  localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(trimmed))
+}
+
+function deleteSearchHistory(query: string) {
+  const history = getLocalSearchHistory()
+  const filtered = history.filter(h => h.query !== query)
+  localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(filtered))
+}
+
+// Iteration 2: Templates
 const useTemplate = ref(false)
+
+// Note Link Picker
+const showNoteLinkPicker = ref(false)
+const linkSearchQuery = ref('')
 
 const noteForm = ref({
   title: '',
@@ -336,6 +410,7 @@ const noteForm = ref({
 })
 
 // Markdown editor toolbar configuration
+// 0 = custom toolbar slot (for note link button)
 const editorToolbars = [
   'bold',
   'underline',
@@ -355,6 +430,7 @@ const editorToolbars = [
   'link',
   'image',
   'table',
+  0,
   '-',
   'revoke',
   'next',
@@ -418,13 +494,13 @@ const favoritedCount = computed(() =>
   noteStore.notes.filter(n => n.is_favorited).length
 )
 
-// Watch editing note to load attachments
-watch(editingNote, async (note) => {
-  if (note) {
-    currentNoteAttachments.value = await noteStore.fetchAttachments(note.id)
-  } else {
-    currentNoteAttachments.value = []
-  }
+// Filtered notes for link picker (exclude current editing note)
+const filteredNotesForLink = computed(() => {
+  const query = linkSearchQuery.value.toLowerCase()
+  return noteStore.notes
+    .filter(n => n.id !== editingNote.value?.id) // Exclude current note
+    .filter(n => !query || n.title.toLowerCase().includes(query))
+    .slice(0, 20) // Limit display count
 })
 
 onMounted(async () => {
@@ -432,24 +508,30 @@ onMounted(async () => {
     noteStore.fetchNotes(),
     noteStore.fetchTags()
   ])
-
-  // Load search history
-  const history = await noteStore.fetchSearchHistory(10)
-  searchHistory.value = history.map(h => ({ value: h.query_text, result_count: h.result_count }))
 })
 
+// Note: Real-time search disabled - search only triggers on button click or Enter key
+
 async function handleSearch() {
-  if (!searchQuery.value) {
+  if (!searchQuery.value || !searchQuery.value.trim()) {
     return
   }
 
+  const query = searchQuery.value.trim()
+  // Save to localStorage (with deduplication)
+  saveSearchToHistory(query)
+
+  isSearching.value = true
   try {
-    searchResults.value = await noteStore.searchNotesSemantic(searchQuery.value)
+    searchResults.value = await noteStore.searchNotesSemantic(query)
     if (searchResults.value.length === 0) {
       ElMessage.info('未找到相关笔记')
     }
   } catch (error) {
+    console.error('Search failed:', error)
     ElMessage.error('搜索失败')
+  } finally {
+    isSearching.value = false
   }
 }
 
@@ -537,7 +619,6 @@ async function handleSave() {
 function closeDialog() {
   showCreateDialog.value = false
   editingNote.value = null
-  currentNoteAttachments.value = []
   noteForm.value = {
     title: '',
     content: '',
@@ -592,32 +673,65 @@ function handleTemplateCanel() {
   showCreateDialog.value = true
 }
 
-async function handleAttachmentUploadSuccess(attachment: Attachment) {
-  currentNoteAttachments.value.push(attachment)
-  ElMessage.success('附件上传成功')
-}
-
-async function handleAttachmentDelete(attachmentId: number) {
-  currentNoteAttachments.value = currentNoteAttachments.value.filter(a => a.id !== attachmentId)
-  ElMessage.success('附件已删除')
-}
-
 function toggleQuickFilter(filter: 'pinned' | 'favorited' | 'recent') {
   quickFilter.value = quickFilter.value === filter ? null : filter
 }
 
-async function querySearchHistory(queryString: string, cb: Function) {
+function querySearchHistory(queryString: string, cb: Function) {
   if (!queryString) {
-    const history = await noteStore.fetchSearchHistory(10)
-    cb(history.map(h => ({ value: h.query_text, result_count: h.result_count })))
+    const history = getLocalSearchHistory()
+    cb(history.map(h => ({ value: h.query })))
   } else {
     cb([])
   }
 }
 
+function handleDeleteHistory(query: string) {
+  deleteSearchHistory(query)
+}
+
+// Insert note link [[Title]] at the end of content
+function insertNoteLink(note: Note) {
+  const linkText = `[[${note.title}]]`
+  noteForm.value.content += linkText
+  showNoteLinkPicker.value = false
+  linkSearchQuery.value = ''
+  ElMessage.success(`已插入链接: ${note.title}`)
+}
+
 function handleHistorySelect(item: { value: string }) {
   searchQuery.value = item.value
   handleSearch()
+}
+
+// Quick actions handlers
+async function handleTogglePin(noteId: number, pinned: boolean) {
+  try {
+    await noteStore.togglePin(noteId, pinned)
+    ElMessage.success(pinned ? '已置顶' : '已取消置顶')
+  } catch (error) {
+    ElMessage.error('操作失败')
+  }
+}
+
+async function handleToggleFavorite(noteId: number, favorited: boolean) {
+  try {
+    await noteStore.toggleFavorite(noteId, favorited)
+    ElMessage.success(favorited ? '已收藏' : '已取消收藏')
+  } catch (error) {
+    ElMessage.error('操作失败')
+  }
+}
+
+// Handle navigation from backlinks
+function handleNavigateToNote(noteId: number) {
+  const note = noteStore.notes.find(n => n.id === noteId)
+  if (note) {
+    viewingNote.value = note
+    showViewDialog.value = true
+  } else {
+    ElMessage.warning('笔记不存在或已被删除')
+  }
 }
 </script>
 
@@ -672,21 +786,45 @@ function handleHistorySelect(item: { value: string }) {
 .filters-bar {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: $spacing-xl;
   padding: $spacing-lg;
   background-color: $bg-color-card;
   border-radius: $radius-lg;
   box-shadow: $shadow-sm;
+  flex-wrap: wrap;
+  gap: $spacing-md;
 
   .filters-left {
     display: flex;
     gap: $spacing-md;
     flex: 1;
+    flex-wrap: wrap;
+    align-items: center;
+    min-width: 0; // 防止 flex 子元素溢出
   }
 
   .filters-right {
     flex-shrink: 0;
+  }
+
+  // 响应式筛选器元素
+  .filter-search {
+    width: 280px;
+    min-width: 200px;
+    flex-shrink: 1;
+  }
+
+  .filter-tags {
+    width: 180px;
+    min-width: 140px;
+    flex-shrink: 1;
+  }
+
+  .filter-sort {
+    width: 130px;
+    min-width: 110px;
+    flex-shrink: 1;
   }
 }
 
@@ -905,6 +1043,122 @@ function handleHistorySelect(item: { value: string }) {
   .footer-time {
     font-size: 12px;
     color: #999;
+  }
+}
+
+// ============================================
+// New v2 Layout Styles (Notion-style)
+// ============================================
+.clean-header-v2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.clean-footer-v2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+
+  .meta-row {
+    display: flex;
+    gap: 12px;
+    flex: 1;
+  }
+
+  .footer-tags {
+    min-width: 200px;
+    max-width: 280px;
+  }
+
+  .footer-source {
+    min-width: 200px;
+    max-width: 300px;
+  }
+
+  .footer-time {
+    font-size: 12px;
+    color: #999;
+    flex-shrink: 0;
+  }
+}
+
+// ============================================
+// Search History Item Styles
+// ============================================
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 0;
+
+  .history-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .delete-icon {
+    color: #c0c4cc;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s ease;
+    font-size: 14px;
+
+    &:hover {
+      color: #f56c6c;
+    }
+  }
+
+  &:hover .delete-icon {
+    opacity: 1;
+  }
+}
+
+// ============================================
+// Note Link Picker Styles
+// ============================================
+.note-link-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.note-link-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+  transition: background 0.2s ease;
+
+  &:hover {
+    background: #f5f7fa;
+  }
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  .note-title {
+    font-weight: 500;
+    color: #303133;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-right: 12px;
+  }
+
+  .note-date {
+    font-size: 12px;
+    color: #909399;
+    flex-shrink: 0;
   }
 }
 </style>

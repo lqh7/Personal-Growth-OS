@@ -115,7 +115,7 @@ def get_langchain_llm():
     Get LangChain-compatible LLM instance for LangGraph agents.
 
     Supports multiple providers:
-    - openai: ChatOpenAI
+    - openai: ChatOpenAI (with JWT token support)
     - claude: ChatAnthropic
     - ollama: ChatOllama
 
@@ -124,36 +124,11 @@ def get_langchain_llm():
 
     Raises:
         ValueError: If provider is not supported
+
+    Note:
+        For OpenAI provider, automatically detects JWT tokens and uses
+        Authorization header for proxy services (e.g., TrendMicro).
     """
-    provider = settings.LLM_PROVIDER
-
-    if provider == "openai":
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(
-            model=settings.OPENAI_MODEL,
-            api_key=settings.OPENAI_API_KEY,
-            base_url=getattr(settings, "OPENAI_API_BASE", None),
-            streaming=True,
-            temperature=0.7,
-        )
-
-    elif provider == "claude":
-        from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(
-            model=settings.ANTHROPIC_MODEL,
-            api_key=settings.ANTHROPIC_API_KEY,
-            base_url=getattr(settings, "ANTHROPIC_API_BASE", None) if getattr(settings, "ANTHROPIC_API_BASE", None) else None,
-            streaming=True,
-            temperature=0.7,
-        )
-
-    elif provider == "ollama":
-        from langchain_community.chat_models import ChatOllama
-        return ChatOllama(
-            model=settings.OLLAMA_MODEL,
-            base_url=settings.OLLAMA_BASE_URL,
-            temperature=0.7,
-        )
-
-    else:
-        raise ValueError(f"Unsupported LLM provider: {provider}. Supported: openai, claude, ollama")
+    # Use new utility function with JWT auth support
+    from .llm_utils import get_langchain_llm_with_auth
+    return get_langchain_llm_with_auth()

@@ -42,8 +42,6 @@ export interface LLMSettings {
 // Constants
 // ============================================================================
 
-const STORAGE_KEY = 'personal-growth-os-settings'
-
 const DEFAULT_SETTINGS: LLMSettings = {
   llmProvider: 'openai',
   openaiApiKey: '',

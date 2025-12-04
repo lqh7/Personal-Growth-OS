@@ -105,8 +105,11 @@ class TaskReminderService:
 
     def check_and_send_reminders(self):
         """
-        Check for tasks starting in 10 minutes AND tasks ending now, send reminders.
+        Check for tasks starting within 11 minutes AND tasks ending now, send reminders.
         Called by APScheduler every minute.
+
+        Start reminders: sent for tasks with start_time in [now, now+11min]
+        End reminders: sent for tasks with end_time in [now-1min, now]
         """
         if not self.dingtalk.enabled:
             return
@@ -128,8 +131,14 @@ class TaskReminderService:
             db.close()
 
     def _send_start_reminders(self, db: Session, now: datetime):
-        """Send start reminders for tasks starting in 10-11 minutes."""
-        reminder_window_start = now + timedelta(minutes=10)
+        """Send start reminders for tasks starting within 0-11 minutes.
+
+        Modified to handle tasks created with start_time < 10 minutes from now.
+        Now checks [now, now+11min] instead of [now+10min, now+11min].
+        """
+        # 扩展查询窗口：从当前时间到11分钟后
+        # 这样可以覆盖刚创建的、开始时间在10分钟内的任务
+        reminder_window_start = now
         reminder_window_end = now + timedelta(minutes=11)
 
         # Query tasks that need start reminders
@@ -139,7 +148,7 @@ class TaskReminderService:
                 Task.start_time >= reminder_window_start,
                 Task.start_time < reminder_window_end,
                 Task.status.notin_(['completed', 'archived']),
-                # 防止重复提醒
+                # 防止重复提醒：未发送过提醒，或上次发送时间早于本次任务开始时间之前10分钟
                 or_(
                     Task.last_reminder_sent_at.is_(None),
                     Task.last_reminder_sent_at < Task.start_time - timedelta(minutes=10)
@@ -186,6 +195,52 @@ class TaskReminderService:
                 task.last_end_reminder_sent_at = now
                 db.commit()
                 logger.info(f"Sent end reminder for task: {task.title}")
+
+    def send_immediate_start_reminder(self, db: Session, task: Task):
+        """
+        Send immediate start reminder for a task that starts within 10 minutes.
+        Called when creating/updating a task with start_time in the near future.
+
+        This fixes the bug where tasks created with start_time < 10 minutes
+        would never get a reminder (since the scheduler only checks 10-11 min window).
+
+        Args:
+            db: Database session
+            task: Task object with start_time set
+        """
+        if not self.dingtalk.enabled:
+            return
+
+        if not task.start_time:
+            return
+
+        now = datetime.now()
+
+        # Only send if start_time is within 10 minutes from now
+        time_until_start = (task.start_time - now).total_seconds() / 60
+
+        if time_until_start < 0:
+            # Task already started, don't send start reminder
+            return
+
+        if time_until_start > 10:
+            # Task starts in more than 10 minutes, scheduler will handle it
+            return
+
+        # Check if reminder was already sent for this start_time
+        if task.last_reminder_sent_at:
+            # If reminder was sent within the last 10 minutes of start_time, skip
+            if task.last_reminder_sent_at >= task.start_time - timedelta(minutes=10):
+                return
+
+        # Send immediate reminder
+        project_name = task.project.name if task.project else None
+        success = self.dingtalk.send_task_start_reminder(task, project_name)
+
+        if success:
+            task.last_reminder_sent_at = now
+            db.commit()
+            logger.info(f"Sent immediate start reminder for task: {task.title} (starts in {time_until_start:.1f} min)")
 
 
 # Global singleton

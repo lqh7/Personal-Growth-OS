@@ -24,6 +24,11 @@ psycopg-binary>=3.2.0  # PostgreSQL driver (binary for Windows)
 # Embeddings (for vector generation)
 sentence-transformers>=2.2.0
 
+# llama-index RAG Framework
+llama-index==0.12.5
+llama-index-vector-stores-postgres==0.4.0
+llama-index-embeddings-huggingface==0.5.1
+
 # Utilities
 python-dotenv==1.0.1
 httpx==0.27.2

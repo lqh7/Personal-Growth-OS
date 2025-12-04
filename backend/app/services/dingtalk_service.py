@@ -36,7 +36,7 @@ class DingTalkService:
 
     def send_task_start_reminder(self, task: Task, project_name: str = None) -> bool:
         """
-        Send task START reminder via DingTalk (10 minutes before start).
+        Send task START reminder via DingTalk.
 
         Args:
             task: Task object to remind
@@ -53,6 +53,19 @@ class DingTalkService:
             start_str = task.start_time.strftime('%Y-%m-%d %H:%M') if task.start_time else '未设置'
             end_str = task.end_time.strftime('%Y-%m-%d %H:%M') if task.end_time else '未设置'
             description = task.description or '暂无描述'
+
+            # 动态计算距离开始的时间
+            now = datetime.now()
+            if task.start_time:
+                minutes_until_start = int((task.start_time - now).total_seconds() / 60)
+                if minutes_until_start <= 0:
+                    time_hint = "任务即将开始"
+                elif minutes_until_start == 1:
+                    time_hint = f"任务将在 **1分钟后** 开始"
+                else:
+                    time_hint = f"任务将在 **{minutes_until_start}分钟后** 开始"
+            else:
+                time_hint = "任务即将开始"
 
             # Build beautiful markdown message
             title = f"⏰ 任务即将开始: {task.title}"
@@ -80,7 +93,7 @@ class DingTalkService:
 
 ---
 
-💡 **温馨提示**：任务将在 **10分钟后** 开始，请做好准备！
+💡 **温馨提示**：{time_hint}，请做好准备！
 """
 
             result = self.bot.send_markdown(

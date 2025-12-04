@@ -2,10 +2,9 @@
 Vector Store Service using PostgreSQL pgvector.
 用于存储和检索笔记的向量化表示。
 """
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from functools import lru_cache
 import hashlib
 
 from app.db.models import NoteEmbedding, Note
@@ -127,19 +126,19 @@ class VectorStoreService:
         # Use pgvector's cosine distance operator (<=>)
         # Cosine distance = 1 - cosine similarity
         # So similarity = 1 - distance
+        # Note: Use string formatting for the vector since SQLAlchemy bindparam
+        # conflicts with PostgreSQL's ::vector type cast syntax
+        query_vector_str = str(query_embedding)
         results = db.execute(
-            text("""
+            text(f"""
                 SELECT
                     ne.note_id,
-                    1 - (ne.embedding <=> :query_vector::vector) as similarity
+                    1 - (ne.embedding <=> '{query_vector_str}'::vector) as similarity
                 FROM note_embeddings ne
-                ORDER BY ne.embedding <=> :query_vector::vector
+                ORDER BY ne.embedding <=> '{query_vector_str}'::vector
                 LIMIT :limit
             """),
-            {
-                "query_vector": str(query_embedding),
-                "limit": n_results
-            }
+            {"limit": n_results}
         ).fetchall()
 
         return [
@@ -160,7 +159,12 @@ class VectorStoreService:
         return db.query(NoteEmbedding).count()
 
 
-@lru_cache()
+# Singleton instance (avoid lru_cache issues with hot reload)
+_vector_store_instance: VectorStoreService = None
+
 def get_vector_store() -> VectorStoreService:
-    """Get cached vector store service instance."""
-    return VectorStoreService()
+    """Get vector store service instance."""
+    global _vector_store_instance
+    if _vector_store_instance is None:
+        _vector_store_instance = VectorStoreService()
+    return _vector_store_instance

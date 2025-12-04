@@ -29,12 +29,14 @@ async def lifespan(app: FastAPI):
 
     # Initialize LangGraph PostgreSQL Checkpointer for chat persistence
     from app.core.langgraph_checkpoint import init_checkpointer
+    import logging
+    logging.basicConfig(level=logging.INFO)
     try:
         await init_checkpointer()
-        print("LangGraph Checkpointer initialized")
+        logging.info("LangGraph Checkpointer initialized successfully")
     except Exception as e:
-        print(f"Warning: Failed to initialize Checkpointer: {e}")
-        print("Chat history persistence may not work correctly")
+        logging.error(f"Failed to initialize Checkpointer: {e}", exc_info=True)
+        logging.warning("Chat history persistence may not work correctly")
 
     # Initialize task reminder scheduler
     from app.core.scheduler import init_scheduler, shutdown_scheduler
@@ -88,10 +90,16 @@ app = FastAPI(
 @app.middleware("http")
 async def add_utf8_header(request: Request, call_next):
     """Add UTF-8 content-type header to all JSON responses."""
-    response = await call_next(request)
-    if "application/json" in response.headers.get("content-type", ""):
-        response.headers["content-type"] = "application/json; charset=utf-8"
-    return response
+    try:
+        response = await call_next(request)
+        if "application/json" in response.headers.get("content-type", ""):
+            response.headers["content-type"] = "application/json; charset=utf-8"
+        return response
+    except Exception as e:
+        import traceback
+        print(f"MIDDLEWARE ERROR: {e}")
+        traceback.print_exc()
+        raise
 
 # Configure CORS
 app.add_middleware(
@@ -101,6 +109,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global exception handler for debugging
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    import logging
+    logging.error(f"Unhandled exception: {exc}")
+    logging.error(traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "type": type(exc).__name__}
+    )
 
 
 @app.get("/")
@@ -124,12 +144,11 @@ async def health_check():
 
 
 # Import and include routers
-from app.api.endpoints import tasks, notes, projects, attachments, links, chat, settings as settings_router
+from app.api.endpoints import tasks, notes, projects, links, chat, settings as settings_router
 
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
-app.include_router(attachments.router, prefix="/api/attachments", tags=["attachments"])
 app.include_router(links.router, prefix="/api/links", tags=["links"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])

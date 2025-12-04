@@ -41,7 +41,7 @@
           <CircleCheck />
         </el-icon>
 
-        <!-- Template Actions (for custom templates) -->
+        <!-- Template Actions (only for custom templates) -->
         <div v-if="!template.is_builtin" class="template-actions" @click.stop>
           <el-button
             size="small"
@@ -61,17 +61,7 @@
             <el-icon><Delete /></el-icon>
           </el-button>
         </div>
-        <!-- Duplicate button for built-in templates -->
-        <div v-else class="template-actions" @click.stop>
-          <el-button
-            size="small"
-            circle
-            @click="handleDuplicate(template)"
-            title="复制模板以自定义"
-          >
-            <el-icon><DocumentCopy /></el-icon>
-          </el-button>
-        </div>
+        <!-- 内置模板不显示任何操作按钮，用户直接选择使用即可 -->
       </div>
     </div>
 
