@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 from app.agents.task_igniter_langgraph import get_task_igniter_agent
 from app.agents.deep_researcher import create_deep_task_researcher
+from app.agents.orchestrator import get_orchestrator
 from app.schemas.chat import (
     RunResponseContent,
     RunEvent,
@@ -80,11 +81,15 @@ async def stream_agent_run(
     # Generate thread_id if not provided (this acts as session_id)
     thread_id = session_id or f"thread_{uuid.uuid4().hex[:16]}"
 
-    # ⭐ 使用新的 Deep Task Researcher
-    # 用户可以通过 agent_id 选择使用旧版或新版
-    use_deep_researcher = (agent_id == "deep-task-researcher")
+    # ⭐ 选择 Agent
+    # - task-igniter: 旧版任务分解 (单层架构)
+    # - deep-task-researcher: 新版深度任务研究 (三层架构)
+    # - orchestrator: 动态技能系统 (新架构)
 
-    if use_deep_researcher:
+    if agent_id == "orchestrator":
+        # 使用动态技能 Orchestrator
+        graph = get_orchestrator()
+    elif agent_id == "deep-task-researcher":
         # 使用新的 Deep Task Researcher（三层架构）
         graph = create_deep_task_researcher()
     else:
@@ -118,7 +123,17 @@ async def stream_agent_run(
 
         if stream:
             # ⭐ Stream using LangGraph with config for persistence
-            if use_deep_researcher:
+            if agent_id == "orchestrator":
+                # Orchestrator 使用自己的状态结构
+                input_state = {
+                    "messages": messages,
+                    "current_skill": None,
+                    "skill_sop": None,
+                    "available_tools": [],
+                    "ui_commands": [],
+                    "iteration_count": 0,
+                }
+            elif agent_id == "deep-task-researcher":
                 # Deep Researcher 使用完整的 state 结构
                 input_state = {
                     "messages": messages,
@@ -149,8 +164,9 @@ async def stream_agent_run(
                     logger.info(f"Stream chunk {chunk_count}: type={msg_type}, content={repr(msg_content)[:50] if msg_content else None}")
 
                     # Handle message chunks (LLM token streaming)
-                    # AIMessageChunk has type="AIMessageChunk" (string)
-                    if msg_type == "AIMessageChunk" and msg_content:
+                    # AIMessageChunk has type="AIMessageChunk" (for create_react_agent)
+                    # Orchestrator returns type="ai" for full messages
+                    if msg_content and msg_type in ("AIMessageChunk", "ai"):
                         logger.info(f"Yielding RunContent with content: {repr(msg_content)[:30]}")
                         yield _format_sse_chunk(RunResponseContent(
                             event=RunEvent.RUN_CONTENT,
@@ -163,18 +179,103 @@ async def stream_agent_run(
                     # Handle tool calls if present
                     if hasattr(message, "tool_calls") and message.tool_calls:
                         for tool_call in message.tool_calls:
+                            tool_name = tool_call.get("name", "unknown")
                             yield _format_sse_chunk(RunResponseContent(
                                 event=RunEvent.TOOL_CALL_STARTED,
                                 content_type="tool",
                                 event_data={
-                                    "tool_name": tool_call.get("name", "unknown"),
+                                    "tool_name": tool_name,
                                     "tool_args": tool_call.get("args", {}),
                                 },
                                 session_id=thread_id,
                                 created_at=_get_timestamp(),
                             ))
 
+                            # Send UI refresh command after task/note tool calls
+                            if tool_name.startswith("task_"):
+                                yield _format_sse_chunk(RunResponseContent(
+                                    event=RunEvent.UI_COMMAND,
+                                    content_type="command",
+                                    event_data={
+                                        "type": "refresh",
+                                        "payload": {"target": "tasks"}
+                                    },
+                                    session_id=thread_id,
+                                    created_at=_get_timestamp(),
+                                ))
+                            elif tool_name.startswith("note_"):
+                                yield _format_sse_chunk(RunResponseContent(
+                                    event=RunEvent.UI_COMMAND,
+                                    content_type="command",
+                                    event_data={
+                                        "type": "refresh",
+                                        "payload": {"target": "notes"}
+                                    },
+                                    session_id=thread_id,
+                                    created_at=_get_timestamp(),
+                                ))
+
                 logger.info(f"Streaming completed with {chunk_count} chunks")
+
+                # ⭐ For orchestrator: Get final state and check for tool executions
+                if agent_id == "orchestrator":
+                    try:
+                        final_state = await graph.aget_state(config)
+                        if final_state and final_state.values:
+                            messages_list = final_state.values.get("messages", [])
+                            ui_commands = final_state.values.get("ui_commands", [])
+                            logger.info(f"Final state: {len(messages_list)} messages, ui_commands={ui_commands}")
+
+                            # Send UI commands from state
+                            for cmd in ui_commands:
+                                yield _format_sse_chunk(RunResponseContent(
+                                    event=RunEvent.UI_COMMAND,
+                                    content_type="command",
+                                    event_data=cmd,
+                                    session_id=thread_id,
+                                    created_at=_get_timestamp(),
+                                ))
+
+                            # Check for ToolMessage to detect tool execution
+                            from langchain_core.messages import ToolMessage
+                            task_tool_executed = False
+                            note_tool_executed = False
+
+                            for msg in messages_list:
+                                if isinstance(msg, ToolMessage):
+                                    tool_name = getattr(msg, "name", "")
+                                    if tool_name.startswith("task_"):
+                                        task_tool_executed = True
+                                    elif tool_name.startswith("note_"):
+                                        note_tool_executed = True
+
+                            # Send refresh commands if tools were executed
+                            if task_tool_executed and not ui_commands:
+                                logger.info("Task tool executed, sending refresh command")
+                                yield _format_sse_chunk(RunResponseContent(
+                                    event=RunEvent.UI_COMMAND,
+                                    content_type="command",
+                                    event_data={
+                                        "type": "refresh",
+                                        "payload": {"target": "tasks"}
+                                    },
+                                    session_id=thread_id,
+                                    created_at=_get_timestamp(),
+                                ))
+                            if note_tool_executed and not ui_commands:
+                                logger.info("Note tool executed, sending refresh command")
+                                yield _format_sse_chunk(RunResponseContent(
+                                    event=RunEvent.UI_COMMAND,
+                                    content_type="command",
+                                    event_data={
+                                        "type": "refresh",
+                                        "payload": {"target": "notes"}
+                                    },
+                                    session_id=thread_id,
+                                    created_at=_get_timestamp(),
+                                ))
+                    except Exception as state_error:
+                        logger.warning(f"Could not get final state: {state_error}")
 
             except Exception as stream_error:
                 logger.error(f"Error during streaming: {stream_error}", exc_info=True)
@@ -182,7 +283,16 @@ async def stream_agent_run(
 
         else:
             # ⭐ Non-streaming response with config
-            if use_deep_researcher:
+            if agent_id == "orchestrator":
+                input_state = {
+                    "messages": messages,
+                    "current_skill": None,
+                    "skill_sop": None,
+                    "available_tools": [],
+                    "ui_commands": [],
+                    "iteration_count": 0,
+                }
+            elif agent_id == "deep-task-researcher":
                 input_state = {
                     "messages": messages,
                     "needs_clarification": False,
@@ -295,10 +405,10 @@ async def run_agent(
         ```
     """
     # Validate agent_id
-    if agent_id not in ["task-igniter", "deep-task-researcher"]:
+    if agent_id not in ["task-igniter", "deep-task-researcher", "orchestrator"]:
         raise HTTPException(
             status_code=404,
-            detail=f"Agent '{agent_id}' not found. Available agents: task-igniter, deep-task-researcher"
+            detail=f"Agent '{agent_id}' not found. Available agents: task-igniter, deep-task-researcher, orchestrator"
         )
 
     # Return streaming response
@@ -617,6 +727,20 @@ async def list_agents():
                     "结构化任务分解",
                     "最小可行任务识别"
                 ]
+            },
+            {
+                "id": "orchestrator",
+                "name": "Dynamic Skills Orchestrator",
+                "description": "动态技能编排器 - 基于Markdown SOP的技能调度系统 (LangGraph 1.0 动态架构)",
+                "framework": "LangGraph 1.0",
+                "capabilities": [
+                    "动态技能加载",
+                    "意图识别和路由",
+                    "任务CRUD操作",
+                    "笔记搜索和管理",
+                    "UI指令发送",
+                    "多轮对话续做"
+                ]
             }
         ]
     }
@@ -637,7 +761,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "chat-api",
-        "agents": ["task-igniter", "deep-task-researcher"],
+        "agents": ["task-igniter", "deep-task-researcher", "orchestrator"],
         "timestamp": _get_timestamp(),
     }
 
@@ -705,10 +829,10 @@ async def websocket_agent_chat(
                 continue
 
             # Validate agent_id
-            if agent_id not in ["task-igniter", "deep-task-researcher"]:
+            if agent_id not in ["task-igniter", "deep-task-researcher", "orchestrator"]:
                 await websocket.send_json({
                     "event": RunEvent.RUN_ERROR,
-                    "content": f"Agent '{agent_id}' not found. Available: task-igniter, deep-task-researcher",
+                    "content": f"Agent '{agent_id}' not found. Available: task-igniter, deep-task-researcher, orchestrator",
                     "created_at": _get_timestamp()
                 })
                 continue

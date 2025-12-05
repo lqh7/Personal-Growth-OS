@@ -34,7 +34,43 @@ export enum RunEvent {
   // Control Events
   RunCancelled = 'RunCancelled',
   RunPaused = 'RunPaused',
-  RunContinued = 'RunContinued'
+  RunContinued = 'RunContinued',
+
+  // Dynamic Skills Events (NEW)
+  UICommand = 'UICommand',  // Frontend UI command (toast, refresh, navigate)
+  SkillActivated = 'SkillActivated'  // Skill loading notification
+}
+
+// ============================================================================
+// UI Command Types (Dynamic Skills)
+// ============================================================================
+
+/**
+ * UI command payload types
+ */
+export type UICommandType = 'toast' | 'refresh' | 'navigate' | 'modal'
+
+/**
+ * Toast notification payload
+ */
+export interface ToastPayload {
+  message: string
+  type: 'success' | 'warning' | 'error' | 'info'
+}
+
+/**
+ * Data refresh payload
+ */
+export interface RefreshPayload {
+  target: 'tasks' | 'notes' | 'projects' | 'all'
+}
+
+/**
+ * UI command from backend
+ */
+export interface UICommand {
+  type: UICommandType
+  payload: ToastPayload | RefreshPayload | Record<string, unknown>
 }
 
 // ============================================================================

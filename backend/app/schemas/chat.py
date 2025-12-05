@@ -42,6 +42,10 @@ class RunEvent(str, Enum):
     RUN_PAUSED = "RunPaused"
     RUN_CONTINUED = "RunContinued"
 
+    # Dynamic Skills Events (NEW)
+    UI_COMMAND = "UICommand"  # Frontend UI command (toast, refresh, navigate)
+    SKILL_ACTIVATED = "SkillActivated"  # Skill loading notification
+
 
 # ============================================================================
 # Tool Call Schemas

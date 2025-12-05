@@ -17,9 +17,16 @@ import type {
   SessionEntry,
   RunResponseContent,
   ToolCall,
-  ReasoningStep
+  ReasoningStep,
+  UICommand,
+  ToastPayload,
+  RefreshPayload
 } from '@/types/chat'
 import { RunEvent } from '@/types/chat'
+import { ElMessage } from 'element-plus'
+import { useTaskStore } from './taskStore'
+import { useNoteStore } from './noteStore'
+import { useProjectStore } from './projectStore'
 
 export const useChatStore = defineStore('chat', () => {
   // ============================================================================
@@ -403,7 +410,7 @@ export const useChatStore = defineStore('chat', () => {
 
     try {
       // 5. Connect to WebSocket if not already connected
-      const wsUrl = 'ws://localhost:8000/api/chat/ws/agents/task-igniter/chat'
+      const wsUrl = 'ws://localhost:8000/api/chat/ws/agents/orchestrator/chat'
 
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         ws = new WebSocket(wsUrl)
@@ -613,10 +620,97 @@ export const useChatStore = defineStore('chat', () => {
         }
         break
 
+      case RunEvent.UICommand:
+        // Handle UI command from backend (Dynamic Skills)
+        if (chunk.event_data) {
+          handleUICommand(chunk.event_data as unknown as UICommand)
+        }
+        break
+
+      case RunEvent.SkillActivated:
+        // Handle skill activation notification
+        if (chunk.event_data) {
+          console.log('[ChatStore] Skill activated:', chunk.event_data)
+          // Could show a loading indicator or badge
+        }
+        break
+
       default:
         // Ignore other events (RunOutput, MemoryUpdate, etc.)
         console.debug('[ChatStore] Unhandled event:', chunk.event)
         break
+    }
+  }
+
+  // ============================================================================
+  // Actions - UI Command Handler (Dynamic Skills)
+  // ============================================================================
+
+  /**
+   * Handle UI commands from backend
+   * Supports: toast, refresh, navigate, modal
+   */
+  function handleUICommand(command: UICommand) {
+    console.log('[ChatStore] Handling UI command:', command)
+
+    switch (command.type) {
+      case 'toast': {
+        const payload = command.payload as ToastPayload
+        const messageType = payload.type || 'info'
+        ElMessage[messageType](payload.message)
+        break
+      }
+
+      case 'refresh': {
+        const payload = command.payload as RefreshPayload
+        refreshData(payload.target)
+        break
+      }
+
+      case 'navigate': {
+        // Navigate to a route (future implementation)
+        const path = (command.payload as Record<string, unknown>).path as string
+        if (path) {
+          console.log('[ChatStore] Navigate to:', path)
+          // Could use router.push(path) if needed
+        }
+        break
+      }
+
+      case 'modal': {
+        // Open a modal (future implementation)
+        console.log('[ChatStore] Open modal:', command.payload)
+        break
+      }
+
+      default:
+        console.warn('[ChatStore] Unknown UI command type:', command.type)
+    }
+  }
+
+  /**
+   * Refresh data based on target
+   */
+  async function refreshData(target: 'tasks' | 'notes' | 'projects' | 'all') {
+    console.log('[ChatStore] Refreshing data:', target)
+
+    try {
+      if (target === 'tasks' || target === 'all') {
+        const taskStore = useTaskStore()
+        await taskStore.fetchTasks()
+      }
+
+      if (target === 'notes' || target === 'all') {
+        const noteStore = useNoteStore()
+        await noteStore.fetchNotes()
+      }
+
+      if (target === 'projects' || target === 'all') {
+        const projectStore = useProjectStore()
+        await projectStore.fetchProjects()
+      }
+    } catch (error) {
+      console.error('[ChatStore] Failed to refresh data:', error)
     }
   }
 
@@ -676,6 +770,10 @@ export const useChatStore = defineStore('chat', () => {
     // Actions - Stream Processing
     processStreamChunk,
     sendMessage,
-    closeWebSocket
+    closeWebSocket,
+
+    // Actions - UI Commands (Dynamic Skills)
+    handleUICommand,
+    refreshData
   }
 })

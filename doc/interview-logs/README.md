@@ -6,6 +6,7 @@
 
 | 日期 | 标题 | 分类 | 技术栈 | 难度 |
 |------|------|------|--------|------|
+| 2025-12-05 | [Orchestrator Agent UI刷新机制修复](./2025-12-05-orchestrator-ui-refresh-fix.md) | Backend | LangGraph, Orchestrator, SOP, UICommand | *** |
 | 2025-12-04 | [PostgreSQL pgvector 语义搜索500错误修复](./2025-12-04-pgvector-semantic-search-fix.md) | Backend / Database | pgvector, SQLAlchemy, PostgreSQL | *** |
 | 2025-12-03 | [Chat对话流式渲染与Agent架构优化](./2025-12-03-chat-streaming-react-agent.md) | Full-Stack | LangGraph, Vue3, Pinia, SSE | **** |
 | 2025-12-02 | [Chat对话功能异步Checkpointer修复](./2025-12-02-chat-checkpointer-async-fix.md) | Backend + Agent | LangGraph, AsyncPostgresSaver, FastAPI | *** |
@@ -13,6 +14,7 @@
 ## 按技术栈分类
 
 ### LangGraph / Agent开发
+- [2025-12-05 Orchestrator Agent UI刷新机制修复](./2025-12-05-orchestrator-ui-refresh-fix.md)
 - [2025-12-03 Chat对话流式渲染与Agent架构优化](./2025-12-03-chat-streaming-react-agent.md)
 - [2025-12-02 Chat对话功能异步Checkpointer修复](./2025-12-02-chat-checkpointer-async-fix.md)
 
@@ -20,6 +22,7 @@
 - [2025-12-03 Chat对话流式渲染与Agent架构优化](./2025-12-03-chat-streaming-react-agent.md)
 
 ### 后端 (FastAPI / PostgreSQL)
+- [2025-12-05 Orchestrator Agent UI刷新机制修复](./2025-12-05-orchestrator-ui-refresh-fix.md)
 - [2025-12-04 PostgreSQL pgvector 语义搜索500错误修复](./2025-12-04-pgvector-semantic-search-fix.md)
 - [2025-12-02 Chat对话功能异步Checkpointer修复](./2025-12-02-chat-checkpointer-async-fix.md)
 
@@ -29,6 +32,7 @@
 ## 按问题类型分类
 
 ### Bug修复
+- [2025-12-05 Orchestrator Agent UI刷新机制修复](./2025-12-05-orchestrator-ui-refresh-fix.md) - SOP指令设计+流式类型不匹配
 - [2025-12-04 PostgreSQL pgvector 语义搜索500错误修复](./2025-12-04-pgvector-semantic-search-fix.md) - SQL语法冲突
 - [2025-12-03 Chat对话流式渲染与Agent架构优化](./2025-12-03-chat-streaming-react-agent.md) - 前端渲染问题
 - [2025-12-02 Chat对话功能异步Checkpointer修复](./2025-12-02-chat-checkpointer-async-fix.md) - 异步兼容问题
@@ -39,6 +43,7 @@
 ## 关键技术词索引
 
 ### A-C
+- `AIMessageChunk`: [2025-12-03](./2025-12-03-chat-streaming-react-agent.md), [2025-12-05](./2025-12-05-orchestrator-ui-refresh-fix.md)
 - `async/await`: [2025-12-02](./2025-12-02-chat-checkpointer-async-fix.md)
 - `AsyncConnectionPool`: [2025-12-03](./2025-12-03-chat-streaming-react-agent.md)
 - `AsyncPostgresSaver`: [2025-12-02](./2025-12-02-chat-checkpointer-async-fix.md)
@@ -47,17 +52,22 @@
 - `cosine distance`: [2025-12-04](./2025-12-04-pgvector-semantic-search-fix.md)
 
 ### L-P
-- `LangGraph 1.0`: [2025-12-02](./2025-12-02-chat-checkpointer-async-fix.md), [2025-12-03](./2025-12-03-chat-streaming-react-agent.md)
+- `LangGraph 1.0`: [2025-12-02](./2025-12-02-chat-checkpointer-async-fix.md), [2025-12-03](./2025-12-03-chat-streaming-react-agent.md), [2025-12-05](./2025-12-05-orchestrator-ui-refresh-fix.md)
 - `lru_cache`: [2025-12-04](./2025-12-04-pgvector-semantic-search-fix.md)
+- `Orchestrator Agent`: [2025-12-05](./2025-12-05-orchestrator-ui-refresh-fix.md)
 - `pgvector`: [2025-12-04](./2025-12-04-pgvector-semantic-search-fix.md)
 - `Pinia`: [2025-12-03](./2025-12-03-chat-streaming-react-agent.md)
 - `psycopg3`: [2025-12-02](./2025-12-02-chat-checkpointer-async-fix.md), [2025-12-03](./2025-12-03-chat-streaming-react-agent.md)
 
 ### S-Z
 - `sentence-transformers`: [2025-12-04](./2025-12-04-pgvector-semantic-search-fix.md)
+- `Skill System`: [2025-12-05](./2025-12-05-orchestrator-ui-refresh-fix.md)
+- `SOP`: [2025-12-05](./2025-12-05-orchestrator-ui-refresh-fix.md)
 - `SQLAlchemy`: [2025-12-04](./2025-12-04-pgvector-semantic-search-fix.md)
-- `SSE Streaming`: [2025-12-03](./2025-12-03-chat-streaming-react-agent.md)
-- `stream_mode`: [2025-12-03](./2025-12-03-chat-streaming-react-agent.md)
+- `SSE Streaming`: [2025-12-03](./2025-12-03-chat-streaming-react-agent.md), [2025-12-05](./2025-12-05-orchestrator-ui-refresh-fix.md)
+- `stream_mode`: [2025-12-03](./2025-12-03-chat-streaming-react-agent.md), [2025-12-05](./2025-12-05-orchestrator-ui-refresh-fix.md)
+- `ToolMessage`: [2025-12-05](./2025-12-05-orchestrator-ui-refresh-fix.md)
+- `UICommand`: [2025-12-05](./2025-12-05-orchestrator-ui-refresh-fix.md)
 - `vector similarity`: [2025-12-04](./2025-12-04-pgvector-semantic-search-fix.md)
 - `Vue 3`: [2025-12-03](./2025-12-03-chat-streaming-react-agent.md)
 
@@ -78,4 +88,4 @@
 
 ---
 
-*最后更新: 2025-12-04*
+*最后更新: 2025-12-05*

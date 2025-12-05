@@ -91,7 +91,7 @@ async function handleSendMessage(message: string) {
 
   // Stream response from agent
   try {
-    await streamChat('task-igniter', {
+    await streamChat('orchestrator', {
       message,
       task_id: currentTaskId.value || undefined,
       session_id: currentSessionId.value || undefined,
